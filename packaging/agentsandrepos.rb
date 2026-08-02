@@ -7,7 +7,7 @@ class Agentsandrepos < Formula
   homepage "https://github.com/millisecond/agentsandrepos"
   url "https://github.com/millisecond/agentsandrepos/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "REPLACE_WITH_SHA256_AFTER_TAGGING"
-  license "MIT"
+  license "Apache-2.0"
   head "https://github.com/millisecond/agentsandrepos.git", branch: "main"
 
   depends_on xcode: ["16.0", :build]
