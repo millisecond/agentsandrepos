@@ -29,6 +29,9 @@ public struct AgentTileState: Sendable, Equatable, Identifiable {
     public let glyph: String
     public let path: String
     public let task: AgentTask
+    /// LED levels for the activity bars (see `AgentActivityMeter`); empty
+    /// hides the strip.
+    public let activity: [Int]
 
     public init(agent: AgentSession, location: String, path: String) {
         self.id = agent.sessionId
@@ -55,6 +58,7 @@ public struct AgentTileState: Sendable, Equatable, Identifiable {
         self.glyph = agent.status.glyph
         self.path = path
         self.task = agent.task
+        self.activity = agent.activity
     }
 }
 

@@ -24,6 +24,11 @@ struct AgentTileView: View {
                             .foregroundStyle(Color(severity: state.severity))
                     }
                     Spacer()
+                    // Rides the top row's dead center — the tile's height
+                    // budget is spoken for below.
+                    if !state.activity.isEmpty {
+                        AgentActivityBars(levels: state.activity)
+                    }
                     if state.phase == .waiting {
                         Image(systemName: "hand.raised.fill")
                             .font(.system(size: 10))

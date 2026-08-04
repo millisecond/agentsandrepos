@@ -127,14 +127,47 @@ struct MiniDotRow: View {
     }
 }
 
+/// Whether the dashboard is on screen. Continuous animations must not run
+/// while false: the popover's window outlives close, and an offscreen
+/// repeat-forever animation keeps the display cycle (and CPU) busy forever.
+private struct DashboardLiveKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var dashboardLive: Bool {
+        get { self[DashboardLiveKey.self] }
+        set { self[DashboardLiveKey.self] = newValue }
+    }
+}
+
 /// Continuously rotating gear for busy agents — "working", not a settings
-/// button and not a refresh arrow. State lives in this leaf so snapshot
-/// re-renders don't restart the rotation phase.
+/// button and not a refresh arrow. Renders static while the dashboard is
+/// hidden; the animated leaf is only in the hierarchy while live, so closing
+/// the popover tears the animation down and reopening starts it fresh.
 struct SpinningGear: View {
     let color: Color
     var size: CGFloat = 17
-    @State private var spinning = false
+    @Environment(\.dashboardLive) private var live
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if live, !reduceMotion {
+            AnimatedGear(color: color, size: size)
+        } else {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: size, weight: .medium))
+                .foregroundStyle(color)
+        }
+    }
+}
+
+/// State lives in this leaf so snapshot re-renders don't restart the
+/// rotation phase.
+private struct AnimatedGear: View {
+    let color: Color
+    let size: CGFloat
+    @State private var spinning = false
 
     var body: some View {
         Image(systemName: "gearshape.fill")
@@ -142,7 +175,6 @@ struct SpinningGear: View {
             .foregroundStyle(color)
             .rotationEffect(.degrees(spinning ? 360 : 0))
             .onAppear {
-                guard !reduceMotion else { return }
                 withAnimation(.linear(duration: 2.5).repeatForever(autoreverses: false)) {
                     spinning = true
                 }
@@ -215,6 +247,7 @@ struct SummaryLine: View {
     /// Optional leading SF Symbol (e.g. person/sparkle to tell the agent
     /// tile's user and agent lines apart).
     var icon: String?
+    @Environment(\.dashboardLive) private var live
 
     var body: some View {
         if !display.isEmpty {
@@ -229,7 +262,9 @@ struct SummaryLine: View {
                     .italic()
                     .foregroundStyle(.secondary)
                     .lineLimit(lineLimit)
-                if display.isRefreshing {
+                // The indeterminate spinner is a continuous animation — hide
+                // it while the dashboard is offscreen (see DashboardLiveKey).
+                if display.isRefreshing, live {
                     ProgressView()
                         .controlSize(.mini)
                 }

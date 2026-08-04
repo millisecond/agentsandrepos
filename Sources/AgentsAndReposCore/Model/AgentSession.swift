@@ -52,6 +52,11 @@ public struct AgentSession: Sendable, Equatable, Identifiable {
     public let updatedAt: Date?
     /// What the session is actually working on, from its transcript.
     public let task: AgentTask
+    /// Transcript-throughput LED levels (0–15 per bucket, oldest first) from
+    /// `AgentActivityMeter`; empty when the recent window is quiet. Attached
+    /// by the engine after reading — quantized so it only perturbs snapshot
+    /// equality when a bar would visibly change.
+    public let activity: [Int]
 
     public var id: String { sessionId }
     public var displayName: String { name ?? String(sessionId.prefix(8)) }
@@ -59,7 +64,8 @@ public struct AgentSession: Sendable, Equatable, Identifiable {
 
     public init(
         pid: Int32, sessionId: String, cwd: String, name: String?, kind: String,
-        status: Status, startedAt: Date?, updatedAt: Date?, task: AgentTask = AgentTask()
+        status: Status, startedAt: Date?, updatedAt: Date?, task: AgentTask = AgentTask(),
+        activity: [Int] = []
     ) {
         self.pid = pid
         self.sessionId = sessionId
@@ -70,5 +76,6 @@ public struct AgentSession: Sendable, Equatable, Identifiable {
         self.startedAt = startedAt
         self.updatedAt = updatedAt
         self.task = task
+        self.activity = activity
     }
 }
