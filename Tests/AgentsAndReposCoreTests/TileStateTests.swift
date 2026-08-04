@@ -75,6 +75,74 @@ final class TileStateTests: XCTestCase {
         XCTAssertEqual(tiles[1].title, "stray")
     }
 
+    // MARK: - PR tiles
+
+    private func pr(
+        ci: PullRequest.CIStatus = .none, number: Int = 1, draft: Bool = false,
+        review: String? = nil, url: String = "u"
+    ) -> PullRequest {
+        PullRequest(
+            number: number, title: "t", url: url, isDraft: draft, author: "a",
+            headRefName: "b", reviewDecision: review, ci: ci)
+    }
+
+    func testPRSeverityPrecedence() {
+        // CI fail beats everything, even on a draft.
+        XCTAssertEqual(PRTileState.severity(pr(ci: .fail, draft: true)), .urgent)
+        // Changes requested beats draft and pending CI.
+        XCTAssertEqual(
+            PRTileState.severity(pr(ci: .pending, draft: true, review: "CHANGES_REQUESTED")),
+            .attention)
+        // Draft mutes an otherwise-quiet PR.
+        XCTAssertEqual(PRTileState.severity(pr(ci: .pass, draft: true)), .muted)
+        // Pending CI is info.
+        XCTAssertEqual(PRTileState.severity(pr(ci: .pending)), .info)
+        // Approved or green CI is ok.
+        XCTAssertEqual(PRTileState.severity(pr(review: "APPROVED")), .ok)
+        XCTAssertEqual(PRTileState.severity(pr(ci: .pass)), .ok)
+        // Nothing known yet: awaiting review.
+        XCTAssertEqual(PRTileState.severity(pr()), .info)
+    }
+
+    func testPRStatusLabel() {
+        XCTAssertEqual(PRTileState.statusLabel(pr(ci: .fail)), "CI failing")
+        XCTAssertEqual(
+            PRTileState.statusLabel(pr(review: "CHANGES_REQUESTED")), "changes requested")
+        XCTAssertEqual(PRTileState.statusLabel(pr(draft: true)), "draft")
+        XCTAssertEqual(PRTileState.statusLabel(pr(ci: .pending)), "CI running")
+        XCTAssertEqual(
+            PRTileState.statusLabel(pr(ci: .pass, review: "APPROVED")), "approved · CI passing")
+        XCTAssertEqual(PRTileState.statusLabel(pr(review: "APPROVED")), "approved")
+        XCTAssertEqual(PRTileState.statusLabel(pr(ci: .pass)), "CI passing")
+        XCTAssertEqual(PRTileState.statusLabel(pr()), "awaiting review")
+    }
+
+    func testPRTilesSortSeverityThenRepoThenNumber() {
+        var snap = Snapshot.empty
+        snap.repos = [
+            repo(name: "zeta", prs: [pr(ci: .pass, number: 9, url: "z9")]),
+            repo(
+                name: "alpha",
+                prs: [
+                    pr(ci: .pass, number: 7, url: "a7"),
+                    pr(ci: .fail, number: 3, url: "a3"),
+                    pr(ci: .pass, number: 2, url: "a2"),
+                ]),
+        ]
+        XCTAssertEqual(snap.prTiles.map(\.id), ["a3", "a2", "a7", "z9"])
+        XCTAssertEqual(snap.prTiles.first?.reference, "alpha #3")
+    }
+
+    func testPRTilesExcludeIgnoredRepos() {
+        var snap = Snapshot.empty
+        snap.repos = [
+            repo(name: "shown", prs: [pr(url: "s1")]),
+            repo(name: "hidden", prs: [pr(url: "h1")]),
+        ]
+        snap.config.ignoredRepos = ["/p/hidden"]
+        XCTAssertEqual(snap.prTiles.map(\.id), ["s1"])
+    }
+
     // MARK: - Repo tiles
 
     func testRepoSeverityPrecedence() {

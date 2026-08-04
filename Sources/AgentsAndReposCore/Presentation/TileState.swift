@@ -255,6 +255,65 @@ public struct WorktreeTileState: Sendable, Equatable, Identifiable {
     }
 }
 
+/// Everything a PR tile renders, derived from a PullRequest plus the name of
+/// the repo it belongs to.
+public struct PRTileState: Sendable, Equatable, Identifiable {
+    /// The PR URL — numbers collide across repos.
+    public let id: String
+    public let number: Int
+    public let title: String
+    public let repoName: String
+    /// "repo #123" — the tile's identity line.
+    public let reference: String
+    public let author: String
+    public let branch: String
+    public let isDraft: Bool
+    public let ci: PullRequest.CIStatus
+    public let severity: TileSeverity
+    public let statusLabel: String
+    public let url: String
+
+    public init(pr: PullRequest, repoName: String) {
+        self.id = pr.url
+        self.number = pr.number
+        self.title = pr.title
+        self.repoName = repoName
+        self.reference = "\(repoName) #\(pr.number)"
+        self.author = pr.author
+        self.branch = pr.headRefName
+        self.isDraft = pr.isDraft
+        self.ci = pr.ci
+        self.url = pr.url
+        self.severity = Self.severity(pr)
+        self.statusLabel = Self.statusLabel(pr)
+    }
+
+    /// Precedence: CI fail → urgent > changes requested → attention >
+    /// draft → muted > CI pending → info > approved/passing → ok >
+    /// awaiting review → info.
+    static func severity(_ pr: PullRequest) -> TileSeverity {
+        if pr.ci == .fail { return .urgent }
+        if pr.reviewDecision == "CHANGES_REQUESTED" { return .attention }
+        if pr.isDraft { return .muted }
+        if pr.ci == .pending { return .info }
+        if pr.reviewDecision == "APPROVED" || pr.ci == .pass { return .ok }
+        return .info
+    }
+
+    /// One line naming the dominant fact, same precedence as `severity`.
+    static func statusLabel(_ pr: PullRequest) -> String {
+        if pr.ci == .fail { return "CI failing" }
+        if pr.reviewDecision == "CHANGES_REQUESTED" { return "changes requested" }
+        if pr.isDraft { return "draft" }
+        if pr.ci == .pending { return "CI running" }
+        if pr.reviewDecision == "APPROVED" {
+            return pr.ci == .pass ? "approved · CI passing" : "approved"
+        }
+        if pr.ci == .pass { return "CI passing" }
+        return "awaiting review"
+    }
+}
+
 /// One row in the dashboard's Hidden repo list, tagged with why it's hidden
 /// (which also determines the row's icon and restore action).
 public struct HiddenRepoEntry: Sendable, Equatable, Identifiable {
@@ -317,6 +376,20 @@ extension Snapshot {
     /// PRs from visible repos only.
     public var visiblePRs: [(repo: RepoOverview, pr: PullRequest)] {
         allPRs.filter { !isRepoIgnored($0.repo.repo.path) }
+    }
+
+    /// PR tiles: needs-attention (by severity) first, then by repo name,
+    /// then by PR number within a repo.
+    public var prTiles: [PRTileState] {
+        visiblePRs.map { PRTileState(pr: $0.pr, repoName: $0.repo.repo.name) }
+            .sorted { lhs, rhs in
+                if lhs.severity != rhs.severity { return lhs.severity > rhs.severity }
+                if lhs.repoName != rhs.repoName {
+                    return lhs.repoName.localizedCaseInsensitiveCompare(rhs.repoName)
+                        == .orderedAscending
+                }
+                return lhs.number < rhs.number
+            }
     }
 
     /// Agent tiles across the whole snapshot: waiting first, then busy,

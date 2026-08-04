@@ -40,20 +40,24 @@ struct Tile<Content: View>: View {
     }
 }
 
-/// Small pill like "●3" or "↑2" in a semantic color.
+/// Small pill like "● 3 modified" in a semantic color. `compact` drops the
+/// word (the fallback when a full badge row wouldn't fit the tile).
 struct CountBadge: View {
     let symbol: String
     let count: Int
+    let label: String
     let color: Color
+    var compact = false
 
     var body: some View {
-        Text("\(symbol)\(count)")
+        Text(compact ? "\(symbol)\(count)" : "\(symbol) \(count) \(label)")
             .font(.caption2.weight(.semibold))
             .monospacedDigit()
             .foregroundStyle(color)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
             .background(Capsule().fill(color.opacity(0.16)))
+            .help("\(count) \(label)")
     }
 }
 

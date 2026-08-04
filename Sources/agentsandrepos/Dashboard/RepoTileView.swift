@@ -40,12 +40,22 @@ struct RepoTileView: View {
                 }
                 badges
                 HStack(spacing: 6) {
-                    MiniDotRow(dots: state.agentDots, shape: .circle)
+                    if !state.agentDots.isEmpty {
+                        HStack(spacing: 4) {
+                            MiniDotRow(dots: state.agentDots, shape: .circle)
+                            Text(state.agentDots.count == 1
+                                ? "1 agent" : "\(state.agentDots.count) agents")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.secondary)
+                        }
+                        .help("Claude agents working here — color shows status")
+                    }
                     Spacer(minLength: 0)
                     if state.hasError {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 9))
                             .foregroundStyle(.red)
+                            .help("Fetch/status error")
                     }
                 }
             }
@@ -66,20 +76,52 @@ struct RepoTileView: View {
     }
 
     /// Git-state badge row; shows a green check when fully clean and synced.
+    /// Badges carry words ("3 modified"); when a crowded row won't fit the
+    /// tile, ViewThatFits falls back to the compact symbol-only form.
     @ViewBuilder
     private var badges: some View {
-        HStack(spacing: 4) {
-            if state.dirty > 0 { CountBadge(symbol: "●", count: state.dirty, color: .orange) }
-            if state.untracked > 0 { CountBadge(symbol: "+", count: state.untracked, color: .yellow) }
-            if state.ahead > 0 { CountBadge(symbol: "↑", count: state.ahead, color: .blue) }
-            if state.behind > 0 { CountBadge(symbol: "↓", count: state.behind, color: .purple) }
-            if isCleanAndSynced {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.green.opacity(0.8))
-            }
+        ViewThatFits(in: .horizontal) {
+            badgeRow(compact: false)
+            badgeRow(compact: true)
         }
         .frame(height: 14)
+    }
+
+    @ViewBuilder
+    private func badgeRow(compact: Bool) -> some View {
+        HStack(spacing: 4) {
+            if state.dirty > 0 {
+                CountBadge(
+                    symbol: "●", count: state.dirty, label: "modified", color: .orange,
+                    compact: compact)
+            }
+            if state.untracked > 0 {
+                CountBadge(
+                    symbol: "+", count: state.untracked, label: "new", color: .yellow,
+                    compact: compact)
+            }
+            if state.ahead > 0 {
+                CountBadge(
+                    symbol: "↑", count: state.ahead, label: "to push", color: .blue,
+                    compact: compact)
+            }
+            if state.behind > 0 {
+                CountBadge(
+                    symbol: "↓", count: state.behind, label: "to pull", color: .purple,
+                    compact: compact)
+            }
+            if isCleanAndSynced {
+                HStack(spacing: 2) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.green.opacity(0.8))
+                    Text("clean")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .help("No local changes, in sync with remote")
+            }
+        }
     }
 
     private var isCleanAndSynced: Bool {
@@ -115,10 +157,10 @@ struct RepoTileView: View {
         if state.isWorktree {
             parts.append(state.isClaudeManaged ? "(claude worktree)" : "(worktree)")
         }
-        if state.dirty > 0 { parts.append("●\(state.dirty)") }
-        if state.untracked > 0 { parts.append("+\(state.untracked)") }
-        if state.ahead > 0 { parts.append("↑\(state.ahead)") }
-        if state.behind > 0 { parts.append("↓\(state.behind)") }
+        if state.dirty > 0 { parts.append("\(state.dirty) modified") }
+        if state.untracked > 0 { parts.append("\(state.untracked) new") }
+        if state.ahead > 0 { parts.append("\(state.ahead) to push") }
+        if state.behind > 0 { parts.append("\(state.behind) to pull") }
         if state.hasError { parts.append("⚠︎ fetch/status error") }
         if let text = summary.text { parts.append("— \(text)") }
         return parts.joined(separator: " ")

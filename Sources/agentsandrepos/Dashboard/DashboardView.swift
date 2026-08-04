@@ -156,9 +156,8 @@ struct DashboardView: View {
     @ViewBuilder
     private func prsSection(_ snap: Snapshot) -> some View {
         let scope = snap.config.prScope == .mine ? "Mine" : "All"
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Pull Requests · \(scope)")
-                .padding(.bottom, 4)
             switch snap.ghAvailability {
             case .notInstalled:
                 InfoRow(text: "gh CLI not found — brew install gh")
@@ -167,12 +166,14 @@ struct DashboardView: View {
             case .error(let e):
                 InfoRow(text: "GitHub: \(e)")
             case .unknown, .ok:
-                let prs = snap.visiblePRs
-                if prs.isEmpty {
+                let tiles = snap.prTiles
+                if tiles.isEmpty {
                     InfoRow(text: snap.ghAvailability == .unknown ? "Loading…" : "No open PRs")
                 } else {
-                    ForEach(prs, id: \.pr.url) { entry in
-                        PRRowView(repoName: entry.repo.repo.name, pr: entry.pr, actions: actions)
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                        ForEach(tiles) { tile in
+                            PRTileView(state: tile, actions: actions)
+                        }
                     }
                 }
             }
