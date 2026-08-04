@@ -3,7 +3,8 @@ import SwiftUI
 
 /// Banner pinned to the top of the dashboard when a newer release is on
 /// GitHub: version info plus the brew command to run, click-to-copy. No
-/// in-app upgrade — `brew services restart` would kill the app mid-command.
+/// in-app upgrade — the command kills and relaunches the app, which it
+/// can't orchestrate on itself mid-run.
 struct UpdateBanner: View {
     let version: String
     let actions: DashboardActions

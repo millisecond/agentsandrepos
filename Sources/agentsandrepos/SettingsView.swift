@@ -4,6 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @State private var config: AppConfig
+    @State private var launchAtLogin = LaunchAtLogin.isAvailable && LaunchAtLogin.isEnabled
     @ObservedObject var summaries: SummaryService
     let onSave: (AppConfig) -> Void
 
@@ -93,10 +94,17 @@ struct SettingsView: View {
             }
 
             Section {
-                HStack {
-                    Text("Start at login: `brew services start agentsandrepos`")
+                if LaunchAtLogin.isAvailable {
+                    Toggle("Start at login", isOn: $launchAtLogin)
+                        .onChange(of: launchAtLogin) { _, on in
+                            LaunchAtLogin.set(enabled: on)
+                        }
+                } else {
+                    Text("Start at login is available when running the installed app (`brew install --cask agentsandrepos`), not a bare build.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                HStack {
                     Spacer()
                     Button("Save") { onSave(config) }
                         .keyboardShortcut(.defaultAction)

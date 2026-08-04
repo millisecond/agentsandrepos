@@ -1,4 +1,6 @@
 .build/
 .swiftpm/
+.claude/
+dist/
 *.xcodeproj
 .DS_Store

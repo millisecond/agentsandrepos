@@ -1,34 +1,34 @@
 # typed: true
 # frozen_string_literal: true
 
-# Menubar overview of git repos, Claude Code agents, worktrees, and GitHub PRs.
-class Agentsandrepos < Formula
+# Cask for the prebuilt app bundle (RepoBar-style): `brew install --cask
+# agentsandrepos` drops the .app in /Applications and links the CLI; the user
+# opens the app and flips "Start at login" in Settings (SMAppService).
+# Lives in the tap's Casks/ directory. Built by packaging/make-app.sh.
+cask "agentsandrepos" do
+  version "0.1.0"
+  sha256 "REPLACE_WITH_SHA256_FROM_MAKE_APP"
+
+  url "https://github.com/millisecond/agentsandrepos/releases/download/v#{version}/agentsandrepos-#{version}.zip"
+  name "Agents & Repos"
   desc "Menubar overview of git repos, Claude Code agents, worktrees, and GitHub PRs"
   homepage "https://github.com/millisecond/agentsandrepos"
-  url "https://github.com/millisecond/agentsandrepos/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "REPLACE_WITH_SHA256_AFTER_TAGGING"
-  license "MIT"
-  head "https://github.com/millisecond/agentsandrepos.git", branch: "main"
 
-  depends_on xcode: ["16.0", :build]
-  depends_on :macos
+  depends_on macos: ">= :sonoma"
 
-  def install
-    system "swift", "build", "--disable-sandbox", "-c", "release"
-    bin.install ".build/release/agentsandrepos"
-  end
+  app "Agents & Repos.app"
+  binary "#{appdir}/Agents & Repos.app/Contents/MacOS/agentsandrepos"
 
-  service do
-    run [opt_bin/"agentsandrepos"]
-    # Restart on crashes, but not when a copy exits cleanly because another
-    # instance already holds the single-instance lock.
-    keep_alive successful_exit: false
-    process_type :interactive
-    log_path var/"log/agentsandrepos.log"
-    error_log_path var/"log/agentsandrepos.log"
-  end
+  zap trash: [
+    "~/.config/agentsandrepos",
+    "~/Library/Preferences/com.millisecond.agentsandrepos.plist",
+  ]
 
-  test do
-    assert_match "agentsandrepos", shell_output("#{bin}/agentsandrepos --version")
-  end
+  caveats <<~EOS
+    The app is ad-hoc signed (not notarized). If macOS blocks the first
+    launch, allow it under System Settings → Privacy & Security → Open Anyway.
+
+    To start it at login, open the app and enable "Start at login" in
+    Settings.
+  EOS
 end

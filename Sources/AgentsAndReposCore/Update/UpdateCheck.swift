@@ -19,9 +19,11 @@ public enum UpdateCheck {
         return components.url!
     }
 
-    /// Command a brew user runs to move to the advertised release.
+    /// Command a brew user runs to move to the advertised release. The
+    /// upgrade swaps the .app on disk but leaves the old binary running (and
+    /// holding the single-instance lock), so the command also relaunches.
     public static let upgradeCommand =
-        "brew upgrade agentsandrepos && brew services restart agentsandrepos"
+        "brew upgrade --cask agentsandrepos && killall agentsandrepos && open -a \"Agents & Repos\""
 
     /// Bare version from a release `tag_name` ("v0.2.0" → "0.2.0").
     /// Nil when the tag doesn't start with a version number.

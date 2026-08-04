@@ -30,15 +30,30 @@ The menubar icon shows the most urgent thing: `⏸N` agents waiting on you,
 
 ```sh
 brew tap millisecond/tap
-brew install --HEAD agentsandrepos     # or plain install once a version is tagged
-brew services start agentsandrepos     # launch now + at login
+brew install --cask agentsandrepos
+open -a "Agents & Repos"
+```
+
+The cask installs a prebuilt `Agents & Repos.app` (no Xcode needed) and links
+the `agentsandrepos` CLI. The app is ad-hoc signed, not notarized — if macOS
+blocks the first launch, allow it under System Settings → Privacy & Security →
+Open Anyway. To start it at login, enable **Start at login** in the app's
+Settings (a standard login item, visible in System Settings → General →
+Login Items).
+
+Upgrading from the old formula install (`brew services`):
+
+```sh
+brew services stop agentsandrepos && brew uninstall agentsandrepos
+brew install --cask agentsandrepos
 ```
 
 Or from a checkout:
 
 ```sh
 swift build -c release
-.build/release/agentsandrepos &
+.build/release/agentsandrepos &          # bare binary: no login-item support
+packaging/make-app.sh && open "dist/Agents & Repos.app"   # full app bundle
 ```
 
 ## CLI
@@ -115,17 +130,21 @@ clear events are also written to the unified log (subsystem
 
 1. Create the GitHub repo and push: `gh repo create millisecond/agentsandrepos --public --source . --push`
 2. Create the tap repo `millisecond/homebrew-tap` and copy
-   `packaging/agentsandrepos.rb` into its `Formula/` directory.
-3. For a versioned release: bump `Version.current` in
-   `Sources/AgentsAndReposCore/Version.swift` to match the tag (the in-app
-   update banner compares it against the latest release advertised by
-   `api.agentsandrepos.com`), commit, then
-   `git tag v0.1.0 && git push --tags`, and fill the formula's `sha256` with
-   `curl -L https://github.com/millisecond/agentsandrepos/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256`.
+   `packaging/agentsandrepos.rb` into its `Casks/` directory.
+3. For a versioned release:
+   - Bump `Version.current` in `Sources/AgentsAndReposCore/Version.swift` to
+     match the tag (the in-app update banner compares it against the latest
+     release advertised by `api.agentsandrepos.com`), commit, then
+     `git tag v0.1.0 && git push --tags`.
+   - `packaging/make-app.sh` — builds `dist/agentsandrepos-<version>.zip` and
+     prints its sha256.
+   - `gh release create v0.1.0 dist/agentsandrepos-0.1.0.zip`
+   - In the tap's `Casks/agentsandrepos.rb`, set `version` and `sha256` to
+     the new values.
 
 ## Requirements
 
 - macOS 14+
-- Xcode toolchain to build (the brew formula builds from source — no code
-  signing or notarization needed, since locally built binaries aren't
-  quarantined)
+- Xcode toolchain only to build from source (the cask ships a prebuilt,
+  ad-hoc-signed app — first launch needs a one-time Gatekeeper approval
+  since it isn't notarized)

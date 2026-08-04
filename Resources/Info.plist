@@ -4,6 +4,10 @@
 <dict>
     <key>CFBundleIdentifier</key>
     <string>com.millisecond.agentsandrepos</string>
+    <key>CFBundleExecutable</key>
+    <string>agentsandrepos</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
     <key>CFBundleName</key>
     <string>Agents &amp; Repos</string>
     <key>CFBundleDisplayName</key>
