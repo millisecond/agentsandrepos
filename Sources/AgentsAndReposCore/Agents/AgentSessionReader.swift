@@ -139,12 +139,21 @@ extension AgentSession {
     func withStatus(_ new: Status) -> AgentSession {
         AgentSession(
             pid: pid, sessionId: sessionId, cwd: cwd, name: name, kind: kind,
-            status: new, startedAt: startedAt, updatedAt: updatedAt, task: task)
+            status: new, startedAt: startedAt, updatedAt: updatedAt, task: task,
+            activity: activity)
     }
 
     fileprivate func withTask(_ new: AgentTask) -> AgentSession {
         AgentSession(
             pid: pid, sessionId: sessionId, cwd: cwd, name: name, kind: kind,
-            status: status, startedAt: startedAt, updatedAt: updatedAt, task: new)
+            status: status, startedAt: startedAt, updatedAt: updatedAt, task: new,
+            activity: activity)
+    }
+
+    func withActivity(_ new: [Int]) -> AgentSession {
+        AgentSession(
+            pid: pid, sessionId: sessionId, cwd: cwd, name: name, kind: kind,
+            status: status, startedAt: startedAt, updatedAt: updatedAt, task: task,
+            activity: new)
     }
 }

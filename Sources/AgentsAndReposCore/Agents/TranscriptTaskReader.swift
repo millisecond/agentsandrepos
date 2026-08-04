@@ -80,6 +80,19 @@ public enum TranscriptTaskReader {
         return task
     }
 
+    /// Transcript size as of the last `read` for this session, straight from
+    /// the stat cache — no filesystem access. The agents tick calls `read`
+    /// for every live session before asking, so the cache is warm; nil only
+    /// before the first successful read (e.g. transcript missing).
+    public static func cachedTranscriptSize(
+        cwd: String, sessionId: String, home: String = NSHomeDirectory()
+    ) -> UInt64? {
+        let path = transcriptPath(cwd: cwd, sessionId: sessionId, home: home)
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        return cache[path]?.size
+    }
+
     /// Walks the file end-to-start one chunk at a time, stopping as soon as
     /// both slots are filled (or the scan cap is hit).
     private static func scanBackwards(fh: FileHandle, size: UInt64) -> AgentTask {

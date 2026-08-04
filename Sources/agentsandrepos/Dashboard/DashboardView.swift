@@ -75,6 +75,7 @@ struct DashboardView: View {
             FooterBar(snapshot: snap, actions: actions)
         }
         .frame(width: 492)
+        .environment(\.dashboardLive, store.isLive)
         .onPreferenceChange(ContentHeightKey.self) { height in
             Task { @MainActor in contentHeight = height }
         }

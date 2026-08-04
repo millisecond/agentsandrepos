@@ -31,6 +31,7 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
 
     private let summaries: SummaryService
     private let store: SnapshotStore
+    private let perf: PerfMonitor
 
     init(
         store: SnapshotStore, actions: DashboardActions, summaries: SummaryService,
@@ -38,6 +39,7 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
     ) {
         self.summaries = summaries
         self.store = store
+        self.perf = perf
         super.init()
         popover.behavior = .transient
         popover.animates = false
@@ -75,6 +77,9 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
         popover.contentViewController?.view.window?.makeKey()
         // LLM summaries only generate while the popover is visible (battery).
         summaries.setPopoverVisible(true)
+        // Foreground CPU (rendering, summaries) doesn't count against the
+        // background-CPU watchdog.
+        perf.setPopoverVisible(true)
         // Transient popovers in .accessory apps don't reliably dismiss when the
         // click lands in another app. Global monitors never see our own app's
         // events, so this can't interfere with in-popover clicks/context menus.
@@ -95,6 +100,7 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
             self.lastCloseAt = Date()
             self.removeMonitor()
             self.summaries.setPopoverVisible(false)
+            self.perf.setPopoverVisible(false)
             self.store.setLive(false)
         }
     }

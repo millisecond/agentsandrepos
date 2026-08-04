@@ -28,6 +28,7 @@ public actor RefreshEngine {
     private var gitStates: [String: GitState] = [:]
     private var sessions: [AgentSession] = []
     private var agentDebouncer = AgentStatusDebouncer()
+    private var activityMeter = AgentActivityMeter()
     private var prs: [String: [PullRequest]] = [:]
     private var remoteInfo: [String: RemoteInfo] = [:]
 
@@ -387,7 +388,21 @@ public actor RefreshEngine {
     }
 
     private func agentsTick() {
-        sessions = agentDebouncer.apply(AgentSessionReader.read())
+        var read = agentDebouncer.apply(AgentSessionReader.read())
+        // Transcript sizes come from the stat cache the read above just
+        // warmed — the meter costs no filesystem access of its own.
+        let now = Date()
+        for i in read.indices {
+            let s = read[i]
+            if let size = TranscriptTaskReader.cachedTranscriptSize(
+                cwd: s.cwd, sessionId: s.sessionId)
+            {
+                activityMeter.record(id: s.sessionId, transcriptSize: size, at: now)
+            }
+            read[i] = s.withActivity(activityMeter.levels(id: s.sessionId, at: now))
+        }
+        activityMeter.prune(keeping: Set(read.map(\.sessionId)))
+        sessions = read
     }
 
     private func statusTick() async {

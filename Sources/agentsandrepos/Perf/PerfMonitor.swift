@@ -13,6 +13,10 @@ final class PerfMonitor: ObservableObject {
 
     private var model = CPUWatchdogModel()
     private var loop: Task<Void, Never>?
+    private var popoverVisible = false
+    /// True if the popover was visible at any point since the last sample, so
+    /// even a brief open/close inside one 30s interval excludes that interval.
+    private var intervalTouchedForeground = false
     private static let interval: TimeInterval = 30
     private static let log = Logger(
         subsystem: "com.millisecond.agentsandrepos", category: "perf")
@@ -28,25 +32,35 @@ final class PerfMonitor: ObservableObject {
         }
     }
 
+    /// CPU burned while the user is actively looking at the dashboard is
+    /// expected (rendering, summaries) — those intervals are excluded from the
+    /// watchdog so interactive use can't trip the background-CPU banner.
+    func setPopoverVisible(_ visible: Bool) {
+        if visible || popoverVisible { intervalTouchedForeground = true }
+        popoverVisible = visible
+    }
+
     private func sample() {
         var ru = rusage()
         guard getrusage(RUSAGE_SELF, &ru) == 0 else { return }
         let cpu =
             Double(ru.ru_utime.tv_sec) + Double(ru.ru_utime.tv_usec) / 1e6
             + Double(ru.ru_stime.tv_sec) + Double(ru.ru_stime.tv_usec) / 1e6
+        let foreground = popoverVisible || intervalTouchedForeground
+        intervalTouchedForeground = false
         let wasHot = model.isHot
-        let hot = model.record(cpuSeconds: cpu, at: Date())
+        let hot = model.record(cpuSeconds: cpu, at: Date(), foreground: foreground)
 
         // Rounded to 5% steps so the banner text (and thus the SwiftUI view
         // tree observing it) only changes when the picture meaningfully moves.
         let pct = max(5, Int((model.averageFraction * 20).rounded()) * 5)
-        let newWarning = hot ? "High CPU: averaging ~\(pct)% over the last 5 minutes" : nil
+        let newWarning = hot ? "High CPU: averaging ~\(pct)% while in the background" : nil
         if warning != newWarning { warning = newWarning }
 
         if hot != wasHot {
             if hot {
                 Self.log.error(
-                    "sustained high CPU: ~\(pct, privacy: .public)% 5m average")
+                    "sustained high CPU: ~\(pct, privacy: .public)% background 5m average")
             } else {
                 Self.log.notice("high CPU cleared")
             }
