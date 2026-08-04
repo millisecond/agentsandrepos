@@ -34,14 +34,6 @@ struct SettingsView: View {
                 }
                 Button("Add Folder…") { addFolder() }
                 Stepper("Scan depth: \(config.scanDepth)", value: $config.scanDepth, in: 1...5)
-                Stepper(
-                    config.autoHideStaleDays == 0
-                        ? "Hide stale repos: off"
-                        : "Hide repos untouched for \(config.autoHideStaleDays) days",
-                    value: $config.autoHideStaleDays, in: 0...365, step: 5)
-                Text("Stale repos (no commits or file edits) move to the dashboard's Hidden list, where they can be un-hidden. Repos with running agents or open PRs, and folders added directly as repos, are never hidden. 0 turns this off.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section("Git") {

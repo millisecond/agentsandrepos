@@ -55,6 +55,7 @@ struct DashboardView: View {
                         workspaceSummary
                         agentsSection(snap)
                         prsSection(snap)
+                        worktreesSection(snap)
                         reposSection(snap)
                         ignoredSection(snap)
                     }
@@ -127,21 +128,48 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - Worktrees
+
+    /// Absent entirely when there are no worktrees.
+    @ViewBuilder
+    private func worktreesSection(_ snap: Snapshot) -> some View {
+        let section = snap.worktreeSection
+        if section.totalCount > 0 {
+            VStack(alignment: .leading, spacing: 8) {
+                ExpandableSectionHeader(
+                    title: "Recent Worktrees", section: .worktrees,
+                    totalCount: section.totalCount, isExpanded: section.isExpanded,
+                    canToggle: section.canToggle, actions: actions)
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                    ForEach(section.visible) { tile in
+                        RepoTileView(
+                            state: tile,
+                            summary: summaries.display(for: SummaryFacts.repoKey(tile)),
+                            actions: actions)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Repos
 
     @ViewBuilder
     private func reposSection(_ snap: Snapshot) -> some View {
-        let tiles = snap.repoTiles
+        let section = snap.repoSection
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Repos")
-            if tiles.isEmpty {
+            ExpandableSectionHeader(
+                title: "Recent Repos", section: .repos,
+                totalCount: section.totalCount, isExpanded: section.isExpanded,
+                canToggle: section.canToggle, actions: actions)
+            if section.totalCount == 0 {
                 InfoRow(
                     text: snap.repos.isEmpty
                         ? "No repos found"
                         : "All \(snap.repos.count) repos hidden — see Hidden below")
             } else {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                    ForEach(tiles) { tile in
+                    ForEach(section.visible) { tile in
                         RepoTileView(
                             state: tile,
                             summary: summaries.display(for: SummaryFacts.repoKey(tile)),
@@ -157,8 +185,12 @@ struct DashboardView: View {
     @ViewBuilder
     private func prsSection(_ snap: Snapshot) -> some View {
         let scope = snap.config.prScope == .mine ? "Mine" : "All"
+        let section = snap.prSection
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Pull Requests · \(scope)")
+            ExpandableSectionHeader(
+                title: "Recent Pull Requests · \(scope)", section: .prs,
+                totalCount: section.totalCount, isExpanded: section.isExpanded,
+                canToggle: section.canToggle, actions: actions)
             switch snap.ghAvailability {
             case .notInstalled:
                 InfoRow(text: "gh CLI not found — brew install gh")
@@ -167,12 +199,11 @@ struct DashboardView: View {
             case .error(let e):
                 InfoRow(text: "GitHub: \(e)")
             case .unknown, .ok:
-                let tiles = snap.prTiles
-                if tiles.isEmpty {
+                if section.totalCount == 0 {
                     InfoRow(text: snap.ghAvailability == .unknown ? "Loading…" : "No open PRs")
                 } else {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                        ForEach(tiles) { tile in
+                        ForEach(section.visible) { tile in
                             PRTileView(state: tile, actions: actions)
                         }
                     }
@@ -184,12 +215,12 @@ struct DashboardView: View {
     // MARK: - Hidden
 
     /// Compact list of everything hidden from the sections above — ignored
-    /// agents/repos and stale auto-hidden repos — with one-click restore.
-    /// Absent entirely when nothing is hidden.
+    /// agents and repos — with one-click restore. Absent entirely when
+    /// nothing is hidden.
     @ViewBuilder
     private func ignoredSection(_ snap: Snapshot) -> some View {
         let agents = snap.ignoredAgentTiles
-        let repos = snap.hiddenRepoEntries
+        let repos = snap.ignoredRepoTiles
         if !agents.isEmpty || !repos.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 SectionHeader(title: "Hidden · \(agents.count + repos.count)")
@@ -201,26 +232,16 @@ struct DashboardView: View {
                         actions.unignoreAgent(sessionId: tile.id)
                     }
                 }
-                ForEach(repos) { entry in
+                ForEach(repos) { tile in
                     IgnoredRow(
-                        symbol: entry.reason == .stale
-                            ? "clock"
-                            : entry.tile.isWorktree ? "arrow.triangle.branch" : "folder",
-                        title: entry.tile.name,
-                        subtitle: entry.reason == .stale
-                            ? staleSubtitle(entry.tile, asOf: snap.generatedAt)
-                            : entry.tile.branch
+                        symbol: tile.isWorktree ? "arrow.triangle.branch" : "folder",
+                        title: tile.name,
+                        subtitle: tile.branch
                     ) {
-                        actions.unhideRepo(path: entry.tile.path)
+                        actions.unignoreRepo(path: tile.path)
                     }
                 }
             }
         }
-    }
-
-    private func staleSubtitle(_ tile: RepoTileState, asOf: Date) -> String {
-        guard let activity = tile.lastActivity else { return tile.branch }
-        let days = Int(asOf.timeIntervalSince(activity) / 86_400)
-        return "\(tile.branch) · untouched \(days)d"
     }
 }

@@ -42,7 +42,7 @@ public enum GHClient {
         var args = [
             "pr", "list", "--repo", ownerRepo, "--state", "open", "--limit", "50",
             "--json",
-            "number,title,url,isDraft,author,headRefName,reviewDecision,statusCheckRollup",
+            "number,title,url,isDraft,author,headRefName,reviewDecision,statusCheckRollup,updatedAt",
         ]
         if mineOnly { args += ["--author", "@me"] }
         let r = await ProcessRunner.run(
@@ -67,7 +67,9 @@ public enum GHClient {
                 author: (obj["author"] as? [String: Any])?["login"] as? String ?? "",
                 headRefName: obj["headRefName"] as? String ?? "",
                 reviewDecision: obj["reviewDecision"] as? String,
-                ci: reduceCI(obj["statusCheckRollup"]))
+                ci: reduceCI(obj["statusCheckRollup"]),
+                updatedAt: (obj["updatedAt"] as? String)
+                    .flatMap { try? Date($0, strategy: .iso8601) })
         }
     }
 

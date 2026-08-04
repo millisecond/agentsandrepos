@@ -83,7 +83,9 @@ final class AgentActivityMeterTests: XCTestCase {
         var seen: [[Int]] = []
         for step in 1...14 {
             size += 16_384
-            let t = at(bucket: 0, offset: Double(step))
+            // Fractional offsets so every write stays inside bucket 0
+            // regardless of bucketSeconds.
+            let t = at(bucket: 0, offset: Double(step) / 16 * AgentActivityMeter.bucketSeconds)
             m.record(id: "a", transcriptSize: size, at: t)
             let levels = m.levels(id: "a", at: t)
             if levels != seen.last { seen.append(levels) }
@@ -129,6 +131,71 @@ final class AgentActivityMeterTests: XCTestCase {
         XCTAssertEqual(
             m.levels(id: "a", at: at(bucket: 1))[AgentActivityMeter.bucketCount - 2],
             AgentActivityMeter.level(forBytes: 500))
+    }
+
+    // MARK: - Busy half-credit
+
+    func testBusyBucketFloorsAtHalfWithNoBytes() {
+        var m = AgentActivityMeter()
+        // First sighting sets the baseline, but busy already earns the floor.
+        m.record(id: "a", transcriptSize: 1000, busy: true, at: at(bucket: 0))
+        let levels = m.levels(id: "a", at: at(bucket: 0))
+        XCTAssertEqual(levels.count, AgentActivityMeter.bucketCount)
+        XCTAssertEqual(levels.last, AgentActivityMeter.busyFloorLevel)
+        XCTAssertTrue(levels.dropLast().allSatisfy { $0 == 0 })
+    }
+
+    func testBusyFloorLiftsSmallByteBuckets() {
+        var m = AgentActivityMeter()
+        m.record(id: "a", transcriptSize: 0, busy: true, at: at(bucket: 0))
+        m.record(id: "a", transcriptSize: 100, busy: true, at: at(bucket: 0, offset: 3))
+        // Completed bucket: 100 bytes alone would be a low level; busy lifts
+        // it to the floor.
+        XCTAssertEqual(
+            m.levels(id: "a", at: at(bucket: 1))[AgentActivityMeter.bucketCount - 2],
+            AgentActivityMeter.busyFloorLevel)
+    }
+
+    func testBusyFloorDoesNotCapByteLevels() {
+        var m = AgentActivityMeter()
+        m.record(id: "a", transcriptSize: 0, busy: true, at: at(bucket: 0))
+        m.record(
+            id: "a", transcriptSize: UInt64(AgentActivityMeter.fullScaleBytes), busy: true,
+            at: at(bucket: 0, offset: 3))
+        XCTAssertEqual(
+            m.levels(id: "a", at: at(bucket: 1))[AgentActivityMeter.bucketCount - 2],
+            AgentActivityMeter.maxLevel)
+    }
+
+    func testBusyStreamingStillChangesLevelsOncePerBucket() {
+        // The floor must not reintroduce per-write churn: a busy agent whose
+        // transcript grows continuously changes the array once per bucket.
+        var m = AgentActivityMeter()
+        m.record(id: "a", transcriptSize: 0, busy: true, at: at(bucket: 0))
+        var size: UInt64 = 0
+        var seen: [[Int]] = []
+        for step in 1...14 {
+            size += 16_384
+            // Fractional offsets so every write stays inside bucket 0
+            // regardless of bucketSeconds.
+            let t = at(bucket: 0, offset: Double(step) / 16 * AgentActivityMeter.bucketSeconds)
+            m.record(id: "a", transcriptSize: size, busy: true, at: t)
+            let levels = m.levels(id: "a", at: t)
+            if levels != seen.last { seen.append(levels) }
+        }
+        XCTAssertEqual(seen.count, 1)
+    }
+
+    func testNonBusyRecordEarnsNoFloor() {
+        var m = AgentActivityMeter()
+        m.record(id: "a", transcriptSize: 1000, at: at(bucket: 0))
+        XCTAssertEqual(m.levels(id: "a", at: at(bucket: 0)), [])
+    }
+
+    func testBusyBucketsRollOffTheWindow() {
+        var m = AgentActivityMeter()
+        m.record(id: "a", transcriptSize: 0, busy: true, at: at(bucket: 0))
+        XCTAssertEqual(m.levels(id: "a", at: at(bucket: AgentActivityMeter.bucketCount)), [])
     }
 
     func testSessionsAreIndependent() {

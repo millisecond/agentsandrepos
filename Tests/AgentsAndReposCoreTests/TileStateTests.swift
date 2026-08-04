@@ -79,11 +79,11 @@ final class TileStateTests: XCTestCase {
 
     private func pr(
         ci: PullRequest.CIStatus = .none, number: Int = 1, draft: Bool = false,
-        review: String? = nil, url: String = "u"
+        review: String? = nil, url: String = "u", updated: Date? = nil
     ) -> PullRequest {
         PullRequest(
             number: number, title: "t", url: url, isDraft: draft, author: "a",
-            headRefName: "b", reviewDecision: review, ci: ci)
+            headRefName: "b", reviewDecision: review, ci: ci, updatedAt: updated)
     }
 
     func testPRSeverityPrecedence() {
@@ -117,20 +117,23 @@ final class TileStateTests: XCTestCase {
         XCTAssertEqual(PRTileState.statusLabel(pr()), "awaiting review")
     }
 
-    func testPRTilesSortSeverityThenRepoThenNumber() {
+    func testPRTilesSortByRecencyThenRepoThenNumber() {
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
         var snap = Snapshot.empty
         snap.repos = [
-            repo(name: "zeta", prs: [pr(ci: .pass, number: 9, url: "z9")]),
+            // Newest activity wins regardless of repo name or CI state.
+            repo(name: "zeta", prs: [pr(ci: .pass, number: 9, url: "z9", updated: now)]),
             repo(
                 name: "alpha",
                 prs: [
+                    pr(ci: .fail, number: 3, url: "a3", updated: now.addingTimeInterval(-3_600)),
+                    // No date sorts last; equal-date ties break by number.
                     pr(ci: .pass, number: 7, url: "a7"),
-                    pr(ci: .fail, number: 3, url: "a3"),
-                    pr(ci: .pass, number: 2, url: "a2"),
+                    pr(ci: .pass, number: 2, url: "a2", updated: now.addingTimeInterval(-3_600)),
                 ]),
         ]
-        XCTAssertEqual(snap.prTiles.map(\.id), ["a3", "a2", "a7", "z9"])
-        XCTAssertEqual(snap.prTiles.first?.reference, "alpha #3")
+        XCTAssertEqual(snap.prTiles.map(\.id), ["z9", "a2", "a3", "a7"])
+        XCTAssertEqual(snap.prTiles.first?.reference, "zeta #9")
     }
 
     func testPRTilesExcludeIgnoredRepos() {
@@ -190,7 +193,7 @@ final class TileStateTests: XCTestCase {
             RepoTileState(worktree: wtDirty, parent: overview).agentDots, [.info])
     }
 
-    func testRepoTilesSortAttentionFirstThenName() {
+    func testRepoTilesWithoutActivitySortAlphabeticallyRegardlessOfSeverity() {
         var snap = Snapshot.empty
         snap.repos = [
             repo(name: "zeta"),
@@ -198,7 +201,7 @@ final class TileStateTests: XCTestCase {
             repo(name: "dirty", git: GitState(branch: "m", dirty: 1)),
             repo(name: "broken", git: GitState(branch: "m", fetchError: "x")),
         ]
-        XCTAssertEqual(snap.repoTiles.map(\.name), ["broken", "dirty", "alpha", "zeta"])
+        XCTAssertEqual(snap.repoTiles.map(\.name), ["alpha", "broken", "dirty", "zeta"])
     }
 
     func testDetachedBranchLabel() {
@@ -266,23 +269,22 @@ final class TileStateTests: XCTestCase {
             "former ⎇ former-")
     }
 
-    func testWorktreeTilesAreFirstClassInRepoTiles() {
+    func testWorktreeTilesAreSeparateFromRepoTiles() {
         let wt = WorktreeOverview(
             worktree: Worktree(path: "/wt/r-auth", branch: "auth", detached: false, isClaudeManaged: true),
             git: GitState(branch: "auth", dirty: 1), agents: [])
         var snap = Snapshot.empty
         snap.repos = [repo(name: "r", worktrees: [wt])]
-        let tiles = snap.repoTiles
-        XCTAssertEqual(tiles.count, 2)
-        // Dirty worktree (attention) sorts ahead of its clean parent (ok).
+        XCTAssertEqual(snap.repoTiles.map(\.name), ["r"])
+        XCTAssertFalse(snap.repoTiles[0].isWorktree)
+        let tiles = snap.worktreeTiles
+        XCTAssertEqual(tiles.count, 1)
         XCTAssertEqual(tiles[0].name, "r ⎇ auth")
         XCTAssertTrue(tiles[0].isWorktree)
         XCTAssertTrue(tiles[0].isClaudeManaged)
         XCTAssertEqual(tiles[0].path, "/wt/r-auth")
         XCTAssertEqual(tiles[0].branch, "auth")
         XCTAssertEqual(tiles[0].severity, .attention)
-        XCTAssertEqual(tiles[1].name, "r")
-        XCTAssertFalse(tiles[1].isWorktree)
     }
 
     func testWorktreeBranchPRMovesToWorktreeTile() {
@@ -319,8 +321,8 @@ final class TileStateTests: XCTestCase {
         snap.repos = [repo(name: "r", worktrees: [wt])]
         snap.config.ignoredRepos = ["/wt/r-b"]
         XCTAssertEqual(snap.repoTiles.map(\.name), ["r"])
-        XCTAssertEqual(snap.hiddenRepoEntries.map(\.tile.name), ["r ⎇ b"])
-        XCTAssertEqual(snap.hiddenRepoEntries.first?.reason, .ignored)
+        XCTAssertTrue(snap.worktreeTiles.isEmpty)
+        XCTAssertEqual(snap.ignoredRepoTiles.map(\.name), ["r ⎇ b"])
     }
 
     func testWorktreesOfIgnoredRepoHideWithItWithoutOwnRows() {
@@ -331,7 +333,8 @@ final class TileStateTests: XCTestCase {
         snap.repos = [repo(name: "hide", worktrees: [wt])]
         snap.config.ignoredRepos = ["/p/hide"]
         XCTAssertTrue(snap.repoTiles.isEmpty)
-        XCTAssertEqual(snap.hiddenRepoEntries.map(\.tile.name), ["hide"])
+        XCTAssertTrue(snap.worktreeTiles.isEmpty)
+        XCTAssertEqual(snap.ignoredRepoTiles.map(\.name), ["hide"])
     }
 
     func testWorktreeTileSeverity() {

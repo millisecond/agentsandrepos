@@ -22,12 +22,15 @@ public struct PullRequest: Sendable, Equatable, Identifiable {
     public let headRefName: String
     public let reviewDecision: String?
     public let ci: CIStatus
+    /// Last activity on the PR (commits, comments, reviews) per GitHub.
+    public let updatedAt: Date?
 
     public var id: Int { number }
 
     public init(
         number: Int, title: String, url: String, isDraft: Bool, author: String,
-        headRefName: String, reviewDecision: String?, ci: CIStatus
+        headRefName: String, reviewDecision: String?, ci: CIStatus,
+        updatedAt: Date? = nil
     ) {
         self.number = number
         self.title = title
@@ -37,5 +40,6 @@ public struct PullRequest: Sendable, Equatable, Identifiable {
         self.headRefName = headRefName
         self.reviewDecision = reviewDecision
         self.ci = ci
+        self.updatedAt = updatedAt
     }
 }

@@ -12,18 +12,25 @@ import Foundation
 public struct AgentActivityMeter: Sendable {
     /// Buckets per session — the number of bars a tile renders.
     public static let bucketCount = 16
-    public static let bucketSeconds: TimeInterval = 15
+    public static let bucketSeconds: TimeInterval = 10
     /// Levels run 0 (dark) through maxLevel (full column).
     public static let maxLevel = 15
     /// Bytes appended within one bucket that peg the column. Log scale below:
     /// a small tool result still registers, a huge one doesn't flatten
     /// everything else.
     public static let fullScaleBytes: Double = 256 * 1024
+    /// Floor for a bucket during which the agent was busy: a running agent
+    /// gets half credit even while it appends nothing (thinking, or a long
+    /// tool call that only lands bytes when it finishes), so its strip never
+    /// reads as dead air. Bytes can only raise a busy bucket above this.
+    public static let busyFloorLevel = (maxLevel + 1) / 2
 
     private struct Track {
         var lastSize: UInt64
         /// Bytes appended, keyed by absolute bucket index.
         var buckets: [Int64: UInt64] = [:]
+        /// Buckets during which the agent reported busy at least once.
+        var busyBuckets: Set<Int64> = []
     }
 
     private var tracks: [String: Track] = [:]
@@ -34,13 +41,18 @@ public struct AgentActivityMeter: Sendable {
     /// first sighting only sets the baseline — an existing multi-MB
     /// transcript is not a burst. A shrink (the file was compacted/rewritten)
     /// resets the baseline without counting negative growth.
-    public mutating func record(id: String, transcriptSize: UInt64, at now: Date) {
+    public mutating func record(
+        id: String, transcriptSize: UInt64, busy: Bool = false, at now: Date
+    ) {
         let bucket = Self.bucket(at: now)
         var track = tracks[id] ?? Track(lastSize: transcriptSize)
         let delta = transcriptSize > track.lastSize ? transcriptSize - track.lastSize : 0
         track.lastSize = transcriptSize
         if delta > 0 { track.buckets[bucket, default: 0] += delta }
-        track.buckets = track.buckets.filter { $0.key > bucket - Int64(Self.bucketCount) }
+        if busy { track.busyBuckets.insert(bucket) }
+        let oldest = bucket - Int64(Self.bucketCount)
+        track.buckets = track.buckets.filter { $0.key > oldest }
+        track.busyBuckets = track.busyBuckets.filter { $0 > oldest }
         tracks[id] = track
     }
 
@@ -54,20 +66,28 @@ public struct AgentActivityMeter: Sendable {
     /// idle agent's tile stays bar-free (and equality-stable as empty buckets
     /// keep rotating).
     ///
-    /// The in-progress bucket is capped at a single LED. Its byte count grows
-    /// on every transcript write, and each log-scale threshold it crosses
-    /// would otherwise change this array — and with it snapshot equality —
-    /// several times per bucket, re-rendering the whole dashboard about once
-    /// a second per streaming agent. Capped, the array changes once when
-    /// activity starts (the tip lights) and once per rotation (the completed
-    /// column takes its full height).
+    /// The in-progress bucket's byte level is capped at a single LED. Its
+    /// byte count grows on every transcript write, and each log-scale
+    /// threshold it crosses would otherwise change this array — and with it
+    /// snapshot equality — several times per bucket, re-rendering the whole
+    /// dashboard about once a second per streaming agent. Capped, the array
+    /// changes once when activity starts (the tip lights) and once per
+    /// rotation (the completed column takes its full height). The busy floor
+    /// is exempt from the cap: it flips once per bucket at most, and lifting
+    /// a busy tip to half height immediately is the point.
     public func levels(id: String, at now: Date) -> [Int] {
-        guard let track = tracks[id], !track.buckets.isEmpty else { return [] }
+        guard let track = tracks[id],
+            !(track.buckets.isEmpty && track.busyBuckets.isEmpty)
+        else { return [] }
         let newest = Self.bucket(at: now)
         let out = (0..<Self.bucketCount).map { i in
             let bucket = newest - Int64(Self.bucketCount - 1 - i)
-            let level = Self.level(forBytes: track.buckets[bucket] ?? 0)
-            return bucket == newest ? min(level, 1) : level
+            var level = Self.level(forBytes: track.buckets[bucket] ?? 0)
+            if bucket == newest { level = min(level, 1) }
+            if track.busyBuckets.contains(bucket) {
+                level = max(level, Self.busyFloorLevel)
+            }
+            return level
         }
         return out.allSatisfy { $0 == 0 } ? [] : out
     }

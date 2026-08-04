@@ -204,30 +204,11 @@ public actor RefreshEngine {
         publish()
     }
 
-    /// Un-hide (or re-hide) a repo the stale filter auto-hid.
-    public func setRepoStaleExempt(path: String, exempt: Bool) {
+    public func setSectionExpanded(_ section: DashboardSection, expanded: Bool) {
         var c = config
-        c.staleExemptRepos.removeAll { $0 == path }
-        if exempt { c.staleExemptRepos.append(path) }
+        c.expandedSections.removeAll { $0 == section.rawValue }
+        if expanded { c.expandedSections.append(section.rawValue) }
         config = c
-        ConfigStore.save(c)
-        publish()
-    }
-
-    /// One-click restore from the Hidden list, whatever the reason(s) it's
-    /// hidden: drops the explicit ignore, and if the stale filter would
-    /// immediately re-hide the repo, pins a stale exemption in the same step.
-    public func unhideRepo(path: String) {
-        var c = config
-        c.ignoredRepos.removeAll { $0 == path }
-        config = c
-        let snap = currentSnapshot()
-        if let r = snap.repos.first(where: { $0.repo.path == path }),
-            snap.isRepoStale(r), !c.staleExemptRepos.contains(path)
-        {
-            c.staleExemptRepos.append(path)
-            config = c
-        }
         ConfigStore.save(c)
         publish()
     }
@@ -397,7 +378,8 @@ public actor RefreshEngine {
             if let size = TranscriptTaskReader.cachedTranscriptSize(
                 cwd: s.cwd, sessionId: s.sessionId)
             {
-                activityMeter.record(id: s.sessionId, transcriptSize: size, at: now)
+                activityMeter.record(
+                    id: s.sessionId, transcriptSize: size, busy: s.status.isBusy, at: now)
             }
             read[i] = s.withActivity(activityMeter.levels(id: s.sessionId, at: now))
         }

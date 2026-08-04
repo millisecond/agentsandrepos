@@ -30,5 +30,10 @@ final class SnapshotEqualityTests: XCTestCase {
         var c = a
         c.ghAvailability = .notInstalled
         XCTAssertNotEqual(a, c)
+
+        // Expanding a section must re-publish, or the dashboard won't react.
+        var d = a
+        d.config.expandedSections = ["repos"]
+        XCTAssertNotEqual(a, d)
     }
 }

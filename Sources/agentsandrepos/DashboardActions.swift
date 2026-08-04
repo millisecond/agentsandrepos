@@ -48,9 +48,11 @@ final class DashboardActions {
     func fetchRepo(path: String) { delegate?.fetchRepo(path: path) }
     func ignoreRepo(path: String) { delegate?.setRepoIgnored(path: path, ignored: true) }
     func unignoreRepo(path: String) { delegate?.setRepoIgnored(path: path, ignored: false) }
-    func unhideRepo(path: String) { delegate?.unhideRepo(path: path) }
     func ignoreAgent(sessionId: String) { delegate?.setAgentIgnored(sessionId: sessionId, ignored: true) }
     func unignoreAgent(sessionId: String) { delegate?.setAgentIgnored(sessionId: sessionId, ignored: false) }
+    func setSectionExpanded(_ section: DashboardSection, expanded: Bool) {
+        delegate?.setSectionExpanded(section: section, expanded: expanded)
+    }
     func refreshNow() { delegate?.refreshNow() }
     func togglePRScope() { delegate?.togglePRScope() }
     func toggleAutoFetch() { delegate?.toggleAutoFetch() }

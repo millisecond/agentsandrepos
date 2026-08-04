@@ -285,6 +285,33 @@ struct SectionHeader: View {
     }
 }
 
+/// Section header with a trailing show-all/show-less toggle for sections
+/// that truncate to the most recent tiles. The toggle only appears when
+/// there's actually overflow to reveal.
+struct ExpandableSectionHeader: View {
+    let title: String
+    let section: DashboardSection
+    let totalCount: Int
+    let isExpanded: Bool
+    let canToggle: Bool
+    let actions: DashboardActions
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            SectionHeader(title: title)
+            Spacer()
+            if canToggle {
+                Button(isExpanded ? "Show less" : "Show all \(totalCount)") {
+                    actions.setSectionExpanded(section, expanded: !isExpanded)
+                }
+                .buttonStyle(.borderless)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 /// Muted info row for empty/error states ("No agents running", gh hints).
 struct InfoRow: View {
     let text: String

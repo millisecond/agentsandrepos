@@ -18,9 +18,23 @@ if arguments.contains("--help") || arguments.first == "help" {
           agentsandrepos snapshot    print a one-shot overview to stdout
                           --no-prs   skip GitHub PR lookup
           agentsandrepos --version   print version
+          agentsandrepos unregister-login
+                                     remove the login item (used by uninstall)
 
         config: ~/.config/agentsandrepos/config.json
         """)
+    exit(0)
+}
+
+if arguments.first == "unregister-login" {
+    // Used by packaging/uninstall.sh: only the app itself can remove its
+    // SMAppService login item, so this must run while the bundle still exists.
+    if LaunchAtLogin.isAvailable {
+        LaunchAtLogin.set(enabled: false)
+        print("login item unregistered")
+    } else {
+        print("not running from an app bundle; no login item to unregister")
+    }
     exit(0)
 }
 

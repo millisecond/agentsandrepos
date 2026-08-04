@@ -177,6 +177,7 @@ final class SummaryService: ObservableObject {
             w.append((SummaryFacts.agentAgentKey(t), SummaryFacts.agentAgentPlan(t)))
         }
         for t in snap.repoTiles { w.append((SummaryFacts.repoKey(t), SummaryFacts.repoPlan(t))) }
+        for t in snap.worktreeTiles { w.append((SummaryFacts.repoKey(t), SummaryFacts.repoPlan(t))) }
         wanted = w
 
         let wantedKeys = Set(w.map(\.key))

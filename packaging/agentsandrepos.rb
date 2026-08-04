@@ -21,7 +21,10 @@ cask "agentsandrepos" do
 
   zap trash: [
     "~/.config/agentsandrepos",
+    "~/Library/Caches/com.millisecond.agentsandrepos",
+    "~/Library/HTTPStorages/com.millisecond.agentsandrepos",
     "~/Library/Preferences/com.millisecond.agentsandrepos.plist",
+    "~/Library/Saved Application State/com.millisecond.agentsandrepos.savedState",
   ]
 
   caveats <<~EOS

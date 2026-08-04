@@ -15,25 +15,15 @@ struct AgentTileView: View {
     var body: some View {
         Tile(severity: state.severity) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .top) {
-                    if state.phase == .busy {
-                        SpinningGear(color: Color(severity: state.severity))
-                    } else {
-                        Image(systemName: symbolName)
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(Color(severity: state.severity))
-                    }
-                    Spacer()
-                    // Rides the top row's dead center — the tile's height
-                    // budget is spoken for below.
-                    if !state.activity.isEmpty {
-                        AgentActivityBars(levels: state.activity)
-                    }
-                    if state.phase == .waiting {
-                        Image(systemName: "hand.raised.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.orange)
-                    }
+                // The top-right corner stays empty: it belongs to the hover
+                // ignore button, and a stable top row means nothing shifts
+                // when the agent changes phase.
+                if state.phase == .busy {
+                    SpinningGear(color: Color(severity: state.severity))
+                } else {
+                    Image(systemName: symbolName)
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(Color(severity: state.severity))
                 }
                 // Both message summaries soak up the tile's flexible middle,
                 // in the order the messages actually happened (latest last);
@@ -56,10 +46,16 @@ struct AgentTileView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                Text(state.statusLabel)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(Color(severity: state.severity))
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(state.statusLabel)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color(severity: state.severity))
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    AgentActivityBars(
+                        levels: state.activity,
+                        color: Color(severity: state.severity))
+                }
             }
             .padding(9)
         }

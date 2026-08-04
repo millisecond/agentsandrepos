@@ -33,9 +33,21 @@ final class ConfigTests: XCTestCase {
         c.prScope = .all
         c.ignoredRepos = ["/p/hidden"]
         c.ignoredAgents = ["session-1"]
+        c.expandedSections = ["repos"]
         let data = try JSONEncoder().encode(c)
         let back = try JSONDecoder().decode(AppConfig.self, from: data)
         XCTAssertEqual(back, c)
+        XCTAssertTrue(back.isSectionExpanded(.repos))
+        XCTAssertFalse(back.isSectionExpanded(.prs))
+    }
+
+    /// Keys from the removed stale auto-hide feature must not break decoding.
+    func testLegacyStaleKeysIgnored() throws {
+        let json = """
+            {"autoHideStaleDays": 30, "staleExemptRepos": ["/p/x"]}
+            """
+        let c = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertEqual(c, AppConfig())
     }
 
     func testStoreCreatesDefaultFile() {

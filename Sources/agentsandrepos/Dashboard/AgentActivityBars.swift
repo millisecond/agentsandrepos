@@ -1,61 +1,53 @@
 import AgentsAndReposCore
 import SwiftUI
 
-/// WinAmp-style LED meter: one column per 15s bucket over the last ~4 minutes
-/// (oldest left), column height = transcript bytes the agent appended in that
-/// bucket, log-scaled. A pure function of `levels` — no timers and no
-/// animation clock, so a closed popover costs nothing; the bars advance only
-/// when a snapshot actually changes them.
+/// Sparkline of recent agent throughput: one slim bar per 10s bucket over the
+/// last ~2.5 minutes (oldest left), bar height = transcript bytes the agent
+/// appended in that bucket, log-scaled. Drawn in the tile's severity tint so
+/// it reads as part of the status line rather than a foreign widget; empty
+/// buckets keep a faint stub, and a fully quiet window renders as a flat row
+/// of stubs — every tile carries the strip, so nothing pops in and out.
+/// A pure function of `levels` — no timers and no animation clock, so a
+/// closed popover costs nothing; the bars advance only when a snapshot
+/// actually changes them.
 struct AgentActivityBars: View {
-    /// 0–15 per bucket, oldest first (`AgentActivityMeter.levels`).
+    /// 0–15 per bucket, oldest first (`AgentActivityMeter.levels`); empty
+    /// means the whole window is quiet and draws as all stubs.
     let levels: [Int]
+    /// Severity tint of the enclosing tile — matches the status label.
+    let color: Color
 
-    private static let rows = 6
-    private static let rowGap: CGFloat = 1
-    private static let columnGap: CGFloat = 2
-
-    /// Row colors bottom-up: green body, amber shoulder, red peak. Height
-    /// already carries the value; the ramp is redundant decoration, kept
-    /// identical in light and dark mode by the fixed dark backdrop.
-    private static func litColor(row: Int) -> Color {
-        switch row {
-        case 0...3: return Color(red: 0.20, green: 0.85, blue: 0.30)
-        case 4: return Color(red: 1.00, green: 0.75, blue: 0.10)
-        default: return Color(red: 1.00, green: 0.30, blue: 0.25)
-        }
-    }
-    private static let unlit = Color.white.opacity(0.08)
+    private static let columnGap: CGFloat = 1.5
+    /// Any nonzero level gets at least this height so a small tool result
+    /// still registers.
+    private static let minBarHeight: CGFloat = 3
+    private static let stubHeight: CGFloat = 1.5
 
     var body: some View {
         Canvas { context, size in
-            let n = levels.count
-            guard n > 0 else { return }
+            let bars =
+                levels.isEmpty
+                ? [Int](repeating: 0, count: AgentActivityMeter.bucketCount)
+                : levels
+            let n = bars.count
             let colWidth = (size.width - Self.columnGap * CGFloat(n - 1)) / CGFloat(n)
-            let rowHeight =
-                (size.height - Self.rowGap * CGFloat(Self.rows - 1)) / CGFloat(Self.rows)
-            for (i, level) in levels.enumerated() {
-                // Any nonzero level lights at least the bottom LED.
-                let lit =
+            for (i, level) in bars.enumerated() {
+                let fraction = CGFloat(level) / CGFloat(AgentActivityMeter.maxLevel)
+                let height =
                     level == 0
-                    ? 0
-                    : max(
-                        1,
-                        Int(
-                            (CGFloat(level) / CGFloat(AgentActivityMeter.maxLevel)
-                                * CGFloat(Self.rows)).rounded(.up)))
-                let x = CGFloat(i) * (colWidth + Self.columnGap)
-                for row in 0..<Self.rows {
-                    let y = size.height - CGFloat(row + 1) * rowHeight - CGFloat(row) * Self.rowGap
-                    let cell = CGRect(x: x, y: y, width: colWidth, height: rowHeight)
-                    context.fill(
-                        Path(roundedRect: cell, cornerRadius: 0.5),
-                        with: .color(row < lit ? Self.litColor(row: row) : Self.unlit))
-                }
+                    ? Self.stubHeight
+                    : max(Self.minBarHeight, fraction * size.height)
+                let bar = CGRect(
+                    x: CGFloat(i) * (colWidth + Self.columnGap),
+                    y: size.height - height,
+                    width: colWidth,
+                    height: height)
+                context.fill(
+                    Path(roundedRect: bar, cornerRadius: min(colWidth, height) / 2),
+                    with: .color(level == 0 ? Color.primary.opacity(0.12) : color.opacity(0.85)))
             }
         }
-        .frame(width: 112, height: 16)
-        .padding(3)
-        .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.55)))
-        .accessibilityLabel("Agent activity over the last four minutes")
+        .frame(width: 64, height: 12)
+        .accessibilityLabel("Agent activity over the last few minutes")
     }
 }

@@ -8,7 +8,7 @@ final class GHClientTests: XCTestCase {
             [
               {"number": 12, "title": "Fix onboarding", "url": "https://github.com/o/r/pull/12",
                "isDraft": false, "author": {"login": "millisecond"}, "headRefName": "fix-onboarding",
-               "reviewDecision": "APPROVED",
+               "reviewDecision": "APPROVED", "updatedAt": "2026-08-01T10:00:00Z",
                "statusCheckRollup": [
                  {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS"},
                  {"__typename": "StatusContext", "state": "SUCCESS"}
@@ -37,6 +37,8 @@ final class GHClientTests: XCTestCase {
         XCTAssertTrue(prs[1].isDraft)
         XCTAssertEqual(prs[2].ci, .fail)
         XCTAssertEqual(prs[3].ci, .none)
+        XCTAssertEqual(prs[0].updatedAt, Date(timeIntervalSince1970: 1_785_578_400))
+        XCTAssertNil(prs[3].updatedAt)
     }
 
     func testParseGarbage() {

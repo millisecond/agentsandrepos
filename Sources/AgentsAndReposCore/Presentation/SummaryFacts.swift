@@ -54,7 +54,7 @@ public enum SummaryFacts {
     }
 
     public static func workspacePlan(_ snap: Snapshot) -> SummaryPlan {
-        let repos = snap.repoTiles
+        let repos = snap.repoTiles + snap.worktreeTiles
         let quiet = snap.agentTiles.isEmpty && repos.allSatisfy {
             $0.dirty == 0 && $0.untracked == 0 && $0.ahead == 0 && $0.behind == 0
                 && !$0.hasError
@@ -90,7 +90,7 @@ public enum SummaryFacts {
     }
 
     public static func workspaceFacts(_ snap: Snapshot) -> String {
-        let repos = snap.repoTiles
+        let repos = snap.repoTiles + snap.worktreeTiles
         let agents = snap.agentTiles
         var parts = ["Developer workspace: \(repos.count) repo\(repos.count == 1 ? "" : "s")."]
         let dirty = repos.filter { $0.dirty > 0 || $0.untracked > 0 }.count

@@ -276,6 +276,8 @@ public struct PRTileState: Sendable, Equatable, Identifiable {
     public let severity: TileSeverity
     public let statusLabel: String
     public let url: String
+    /// Drives recency sorting; not rendered.
+    public let updatedAt: Date?
 
     public init(pr: PullRequest, repoName: String) {
         self.id = pr.url
@@ -290,6 +292,7 @@ public struct PRTileState: Sendable, Equatable, Identifiable {
         self.url = pr.url
         self.severity = Self.severity(pr)
         self.statusLabel = Self.statusLabel(pr)
+        self.updatedAt = pr.updatedAt
     }
 
     /// Precedence: CI fail → urgent > changes requested → attention >
@@ -318,21 +321,26 @@ public struct PRTileState: Sendable, Equatable, Identifiable {
     }
 }
 
-/// One row in the dashboard's Hidden repo list, tagged with why it's hidden
-/// (which also determines the row's icon and restore action).
-public struct HiddenRepoEntry: Sendable, Equatable, Identifiable {
-    public enum Reason: Sendable, Equatable {
-        case ignored, stale
-    }
+/// A dashboard section truncated to the `recentLimit` most recent tiles,
+/// expandable to the full list via a persisted per-section config flag.
+public struct TileSection<Tile: Identifiable & Sendable & Equatable>: Sendable, Equatable {
+    public static var recentLimit: Int { 6 }
 
-    public let tile: RepoTileState
-    public let reason: Reason
+    /// The tiles to render: the full list when expanded, else the first
+    /// `recentLimit` of it.
+    public let visible: [Tile]
+    public let totalCount: Int
+    public let isExpanded: Bool
 
-    public var id: String { tile.id }
+    /// How many tiles are hidden behind the show-more control.
+    public var overflowCount: Int { totalCount - visible.count }
+    /// Whether a show-more/show-less control is warranted at all.
+    public var canToggle: Bool { totalCount > Self.recentLimit }
 
-    public init(tile: RepoTileState, reason: Reason) {
-        self.tile = tile
-        self.reason = reason
+    init(all: [Tile], isExpanded: Bool) {
+        self.visible = isExpanded ? all : Array(all.prefix(Self.recentLimit))
+        self.totalCount = all.count
+        self.isExpanded = isExpanded
     }
 }
 
@@ -345,36 +353,15 @@ extension Snapshot {
         config.ignoredAgents.contains(sessionId)
     }
 
-    /// Auto-hidden: no commits or file edits for `autoHideStaleDays`, and
-    /// nothing live going on (no agents, no open PRs). Unknown activity keeps
-    /// a repo visible; explicit ignoring takes precedence over staleness.
-    /// Only applies to repos found by scanning a folder of repos — a repo the
-    /// user added directly as a root is always shown.
-    public func isRepoStale(_ r: RepoOverview) -> Bool {
-        guard config.autoHideStaleDays > 0, !r.repo.isRoot,
-            !isRepoIgnored(r.repo.path),
-            !config.staleExemptRepos.contains(r.repo.path)
-        else { return false }
-        guard r.allAgents.isEmpty, r.prs.isEmpty else { return false }
-        guard let activity = r.lastActivity else { return false }
-        let cutoff = TimeInterval(config.autoHideStaleDays) * 86_400
-        return generatedAt.timeIntervalSince(activity) > cutoff
-    }
-
     /// All agent sessions except individually ignored ones — drives the
     /// status-item badge, so an ignored agent can't ping the menu bar.
     public var visibleAgents: [AgentSession] {
         allAgents.filter { !isAgentIgnored($0.sessionId) }
     }
 
-    /// Repos except ignored and stale ones — drives badges and menu sections.
+    /// Repos except ignored ones — drives badges and menu sections.
     public var visibleRepos: [RepoOverview] {
-        repos.filter { !isRepoIgnored($0.repo.path) && !isRepoStale($0) }
-    }
-
-    /// Count of auto-hidden stale repos, for the dashboard's one-line note.
-    public var staleRepoCount: Int {
-        repos.count(where: isRepoStale)
+        repos.filter { !isRepoIgnored($0.repo.path) }
     }
 
     /// PRs from visible repos only.
@@ -382,12 +369,17 @@ extension Snapshot {
         allPRs.filter { !isRepoIgnored($0.repo.repo.path) }
     }
 
-    /// PR tiles: needs-attention (by severity) first, then by repo name,
-    /// then by PR number within a repo.
+    /// PR tiles: most recently updated first (unknown dates last), then by
+    /// repo name, then by PR number within a repo.
     public var prTiles: [PRTileState] {
         visiblePRs.map { PRTileState(pr: $0.pr, repoName: $0.repo.repo.name) }
             .sorted { lhs, rhs in
-                if lhs.severity != rhs.severity { return lhs.severity > rhs.severity }
+                switch (lhs.updatedAt, rhs.updatedAt) {
+                case let (l?, r?) where l != r: return l > r
+                case (.some, .none): return true
+                case (.none, .some): return false
+                default: break
+                }
                 if lhs.repoName != rhs.repoName {
                     return lhs.repoName.localizedCaseInsensitiveCompare(rhs.repoName)
                         == .orderedAscending
@@ -434,14 +426,17 @@ extension Snapshot {
         }
     }
 
-    /// Repo and worktree tiles, one flat first-class list: needs-attention
-    /// (by severity) first, then most recently touched, then alphabetical.
-    /// Ignored/stale repos are excluded — they live in
-    /// `ignoredRepoTiles`/`staleRepoTiles`; worktrees hide with their parent.
+    /// Top-level repo tiles: most recently touched first, then alphabetical.
+    /// Ignored repos are excluded — they live in `ignoredRepoTiles`. Worktrees
+    /// have their own list, `worktreeTiles`.
     public var repoTiles: [RepoTileState] {
-        visibleRepos.flatMap { r in
-            [RepoTileState(repo: r)] + visibleWorktreeTiles(of: r)
-        }.sorted(by: Self.repoTileOrder)
+        visibleRepos.map(RepoTileState.init(repo:)).sorted(by: Self.recencyOrder)
+    }
+
+    /// Worktree tiles of visible repos, same ordering as repo tiles.
+    /// A hidden repo's worktrees hide with it.
+    public var worktreeTiles: [RepoTileState] {
+        visibleRepos.flatMap(visibleWorktreeTiles(of:)).sorted(by: Self.recencyOrder)
     }
 
     private func visibleWorktreeTiles(of r: RepoOverview) -> [RepoTileState] {
@@ -449,8 +444,7 @@ extension Snapshot {
             .map { RepoTileState(worktree: $0, parent: r) }
     }
 
-    static func repoTileOrder(_ lhs: RepoTileState, _ rhs: RepoTileState) -> Bool {
-        if lhs.severity != rhs.severity { return lhs.severity > rhs.severity }
+    static func recencyOrder(_ lhs: RepoTileState, _ rhs: RepoTileState) -> Bool {
         switch (lhs.lastActivity, rhs.lastActivity) {
         case let (l?, r?) where l != r: return l > r
         case (.some, .none): return true
@@ -460,23 +454,22 @@ extension Snapshot {
         }
     }
 
-    /// Tiles for stale auto-hidden repos, alphabetical.
-    public var staleRepoTiles: [RepoTileState] {
-        repos.filter(isRepoStale)
-            .map(RepoTileState.init(repo:))
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    // MARK: Recent-N sections
+
+    public var prSection: TileSection<PRTileState> {
+        section(prTiles, .prs)
     }
 
-    /// The dashboard's Hidden repo list: explicitly ignored and stale
-    /// auto-hidden repos merged into ONE alphabetical list, so an entry is
-    /// findable by name regardless of why it's hidden.
-    public var hiddenRepoEntries: [HiddenRepoEntry] {
-        let entries =
-            ignoredRepoTiles.map { HiddenRepoEntry(tile: $0, reason: .ignored) }
-            + staleRepoTiles.map { HiddenRepoEntry(tile: $0, reason: .stale) }
-        return entries.sorted {
-            $0.tile.name.localizedCaseInsensitiveCompare($1.tile.name) == .orderedAscending
-        }
+    public var worktreeSection: TileSection<RepoTileState> {
+        section(worktreeTiles, .worktrees)
+    }
+
+    public var repoSection: TileSection<RepoTileState> {
+        section(repoTiles, .repos)
+    }
+
+    private func section<T>(_ all: [T], _ id: DashboardSection) -> TileSection<T> {
+        TileSection(all: all, isExpanded: config.isSectionExpanded(id))
     }
 
     /// Tiles for ignored repos and individually ignored worktrees of

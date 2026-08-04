@@ -9,8 +9,8 @@ protocol MenuActionDelegate: AnyObject {
     func toggleAutoFetch()
     func fetchRepo(path: String)
     func setRepoIgnored(path: String, ignored: Bool)
-    func unhideRepo(path: String)
     func setAgentIgnored(sessionId: String, ignored: Bool)
+    func setSectionExpanded(section: DashboardSection, expanded: Bool)
     func openSettings()
 }
 
@@ -101,14 +101,14 @@ extension AppDelegate: MenuActionDelegate {
         Task { await engine.setRepoIgnored(path: path, ignored: ignored) }
     }
 
-    func unhideRepo(path: String) {
-        let engine = engine!
-        Task { await engine.unhideRepo(path: path) }
-    }
-
     func setAgentIgnored(sessionId: String, ignored: Bool) {
         let engine = engine!
         Task { await engine.setAgentIgnored(sessionId: sessionId, ignored: ignored) }
+    }
+
+    func setSectionExpanded(section: DashboardSection, expanded: Bool) {
+        let engine = engine!
+        Task { await engine.setSectionExpanded(section, expanded: expanded) }
     }
 
     func openSettings() {
