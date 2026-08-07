@@ -9,6 +9,8 @@ public enum PRScope: String, Codable, Sendable {
 /// expanded; raw values are what `AppConfig.expandedSections` stores.
 public enum DashboardSection: String, Codable, Sendable, CaseIterable {
     case prs, worktrees, repos
+    /// The unified stack-ranked feed that replaces the three above.
+    case ranked
 }
 
 public struct AppConfig: Codable, Sendable, Equatable {

@@ -54,9 +54,7 @@ struct DashboardView: View {
                         }
                         workspaceSummary
                         agentsSection(snap)
-                        prsSection(snap)
-                        worktreesSection(snap)
-                        reposSection(snap)
+                        rankedSection(snap)
                         ignoredSection(snap)
                     }
                     .padding(12)
@@ -128,40 +126,30 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Worktrees
+    // MARK: - Ranked feed
 
-    /// Absent entirely when there are no worktrees.
+    /// Repos, worktrees, and PRs stack-ranked together by attention score
+    /// (severity + recency) — the most urgent-and-recent things sit right
+    /// below the agents instead of being spread across three sections.
     @ViewBuilder
-    private func worktreesSection(_ snap: Snapshot) -> some View {
-        let section = snap.worktreeSection
-        if section.totalCount > 0 {
-            VStack(alignment: .leading, spacing: 8) {
-                ExpandableSectionHeader(
-                    title: "Recent Worktrees", section: .worktrees,
-                    totalCount: section.totalCount, isExpanded: section.isExpanded,
-                    canToggle: section.canToggle, actions: actions)
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                    ForEach(section.visible) { tile in
-                        RepoTileView(
-                            state: tile,
-                            summary: summaries.display(for: SummaryFacts.repoKey(tile)),
-                            actions: actions)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Repos
-
-    @ViewBuilder
-    private func reposSection(_ snap: Snapshot) -> some View {
-        let section = snap.repoSection
+    private func rankedSection(_ snap: Snapshot) -> some View {
+        let scope = snap.config.prScope == .mine ? "My PRs" : "All PRs"
+        let section = snap.rankedSection(now: Date())
         VStack(alignment: .leading, spacing: 8) {
             ExpandableSectionHeader(
-                title: "Recent Repos", section: .repos,
+                title: "Needs Attention · Repos & \(scope)", section: .ranked,
                 totalCount: section.totalCount, isExpanded: section.isExpanded,
                 canToggle: section.canToggle, actions: actions)
+            switch snap.ghAvailability {
+            case .notInstalled:
+                InfoRow(text: "gh CLI not found — brew install gh (PRs won't show)")
+            case .notAuthenticated:
+                InfoRow(text: "Run `gh auth login` to see PRs")
+            case .error(let e):
+                InfoRow(text: "GitHub: \(e)")
+            case .unknown, .ok:
+                EmptyView()
+            }
             if section.totalCount == 0 {
                 InfoRow(
                     text: snap.repos.isEmpty
@@ -169,41 +157,14 @@ struct DashboardView: View {
                         : "All \(snap.repos.count) repos hidden — see Hidden below")
             } else {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                    ForEach(section.visible) { tile in
-                        RepoTileView(
-                            state: tile,
-                            summary: summaries.display(for: SummaryFacts.repoKey(tile)),
-                            actions: actions)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - PRs
-
-    @ViewBuilder
-    private func prsSection(_ snap: Snapshot) -> some View {
-        let scope = snap.config.prScope == .mine ? "Mine" : "All"
-        let section = snap.prSection
-        VStack(alignment: .leading, spacing: 8) {
-            ExpandableSectionHeader(
-                title: "Recent Pull Requests · \(scope)", section: .prs,
-                totalCount: section.totalCount, isExpanded: section.isExpanded,
-                canToggle: section.canToggle, actions: actions)
-            switch snap.ghAvailability {
-            case .notInstalled:
-                InfoRow(text: "gh CLI not found — brew install gh")
-            case .notAuthenticated:
-                InfoRow(text: "Run `gh auth login` to see PRs")
-            case .error(let e):
-                InfoRow(text: "GitHub: \(e)")
-            case .unknown, .ok:
-                if section.totalCount == 0 {
-                    InfoRow(text: snap.ghAvailability == .unknown ? "Loading…" : "No open PRs")
-                } else {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                        ForEach(section.visible) { tile in
+                    ForEach(section.visible) { item in
+                        switch item {
+                        case .repo(let tile):
+                            RepoTileView(
+                                state: tile,
+                                summary: summaries.display(for: SummaryFacts.repoKey(tile)),
+                                actions: actions)
+                        case .pr(let tile):
                             PRTileView(state: tile, actions: actions)
                         }
                     }
