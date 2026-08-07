@@ -343,20 +343,22 @@ public struct TileSection<Tile: Identifiable & Sendable & Equatable>: Sendable, 
     public static var recentLimit: Int { 6 }
 
     /// The tiles to render: the full list when expanded, else the first
-    /// `recentLimit` of it.
+    /// `limit` of it.
     public let visible: [Tile]
     public let totalCount: Int
     public let isExpanded: Bool
+    public let limit: Int
 
     /// How many tiles are hidden behind the show-more control.
     public var overflowCount: Int { totalCount - visible.count }
     /// Whether a show-more/show-less control is warranted at all.
-    public var canToggle: Bool { totalCount > Self.recentLimit }
+    public var canToggle: Bool { totalCount > limit }
 
-    init(all: [Tile], isExpanded: Bool) {
-        self.visible = isExpanded ? all : Array(all.prefix(Self.recentLimit))
+    init(all: [Tile], isExpanded: Bool, limit: Int = TileSection.recentLimit) {
+        self.visible = isExpanded ? all : Array(all.prefix(limit))
         self.totalCount = all.count
         self.isExpanded = isExpanded
+        self.limit = limit
     }
 }
 

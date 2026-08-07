@@ -106,9 +106,7 @@ struct RepoTileView: View {
     /// What the copy button yields: the directory name — for worktrees that's
     /// the checkout dir ("repo-slug"), not the "repo ⎇ slug" display title —
     /// so it pastes cleanly into cd/CLI commands.
-    private var copyName: String {
-        (state.path as NSString).lastPathComponent
-    }
+    private var copyName: String { Self.copyName(for: state) }
 
     /// Each workflow-run row adds to the standard height so the grid row grows
     /// with the tile instead of squeezing the badges out the bottom.
@@ -172,27 +170,11 @@ struct RepoTileView: View {
 
     @ViewBuilder
     private var contextMenuItems: some View {
-        Button("Open in Finder") { actions.openInFinder(path: state.path) }
-        Button("Open in Terminal") { actions.openInTerminal(path: state.path) }
-        if let gh = state.githubRepo {
-            Button("Open on GitHub") { actions.openURL("https://github.com/\(gh)") }
-            Button("Open Actions") { actions.openURL("https://github.com/\(gh)/actions") }
-        }
-        Button("Copy Name") { actions.copyText(copyName) }
-        Button("Copy Path") { actions.copyPath(state.path) }
-        Divider()
-        Button("Fetch Now") { actions.fetchRepo(path: state.path) }
-        Button("Ignore") { actions.ignoreRepo(path: state.path) }
-        if !state.worktrees.isEmpty {
-            Divider()
-            ForEach(state.worktrees) { wt in
-                Menu("⎇ \(wt.name)\(wt.isClaudeManaged ? " · claude" : "")") {
-                    Button("Open in Finder") { actions.openInFinder(path: wt.path) }
-                    Button("Open in Terminal") { actions.openInTerminal(path: wt.path) }
-                    Button("Copy Path") { actions.copyPath(wt.path) }
-                }
-            }
-        }
+        RepoContextMenuItems(state: state, actions: actions)
+    }
+
+    static func copyName(for state: RepoTileState) -> String {
+        (state.path as NSString).lastPathComponent
     }
 
     private var helpText: String {
@@ -210,5 +192,36 @@ struct RepoTileView: View {
         }
         if let text = summary.text { parts.append("— \(text)") }
         return parts.joined(separator: " ")
+    }
+}
+
+/// The repo/worktree action menu, shared between the tile (right-click and
+/// hover ⋯) and the ranked full-width row.
+struct RepoContextMenuItems: View {
+    let state: RepoTileState
+    let actions: DashboardActions
+
+    var body: some View {
+        Button("Open in Finder") { actions.openInFinder(path: state.path) }
+        Button("Open in Terminal") { actions.openInTerminal(path: state.path) }
+        if let gh = state.githubRepo {
+            Button("Open on GitHub") { actions.openURL("https://github.com/\(gh)") }
+            Button("Open Actions") { actions.openURL("https://github.com/\(gh)/actions") }
+        }
+        Button("Copy Name") { actions.copyText(RepoTileView.copyName(for: state)) }
+        Button("Copy Path") { actions.copyPath(state.path) }
+        Divider()
+        Button("Fetch Now") { actions.fetchRepo(path: state.path) }
+        Button("Ignore") { actions.ignoreRepo(path: state.path) }
+        if !state.worktrees.isEmpty {
+            Divider()
+            ForEach(state.worktrees) { wt in
+                Menu("⎇ \(wt.name)\(wt.isClaudeManaged ? " · claude" : "")") {
+                    Button("Open in Finder") { actions.openInFinder(path: wt.path) }
+                    Button("Open in Terminal") { actions.openInTerminal(path: wt.path) }
+                    Button("Copy Path") { actions.copyPath(wt.path) }
+                }
+            }
+        }
     }
 }

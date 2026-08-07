@@ -101,9 +101,14 @@ extension Snapshot {
             .map(\.tile)
     }
 
+    /// Rows are ~3× denser than tiles, so the ranked feed defaults to a
+    /// deeper cut than the grid sections did.
+    public static var rankedRecentLimit: Int { 12 }
+
     public func rankedSection(now: Date = Date()) -> TileSection<RankedTile> {
         TileSection(
             all: rankedTiles(now: now),
-            isExpanded: config.isSectionExpanded(.ranked))
+            isExpanded: config.isSectionExpanded(.ranked),
+            limit: Self.rankedRecentLimit)
     }
 }

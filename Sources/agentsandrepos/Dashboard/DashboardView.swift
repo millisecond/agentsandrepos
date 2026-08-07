@@ -156,20 +156,22 @@ struct DashboardView: View {
                         ? "No repos found"
                         : "All \(snap.repos.count) repos hidden — see Hidden below")
             } else {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                LazyVStack(spacing: 5) {
                     ForEach(section.visible) { item in
-                        switch item {
-                        case .repo(let tile):
-                            RepoTileView(
-                                state: tile,
-                                summary: summaries.display(for: SummaryFacts.repoKey(tile)),
-                                actions: actions)
-                        case .pr(let tile):
-                            PRTileView(state: tile, actions: actions)
-                        }
+                        RankedRowView(
+                            item: item,
+                            summary: rowSummary(for: item),
+                            actions: actions)
                     }
                 }
             }
+        }
+    }
+
+    private func rowSummary(for item: RankedTile) -> SummaryDisplay {
+        switch item {
+        case .repo(let tile): return summaries.display(for: SummaryFacts.repoKey(tile))
+        case .pr: return SummaryDisplay()
         }
     }
 
