@@ -245,23 +245,51 @@ private struct AnimatedGear: View {
     }
 }
 
-/// Small eye-slash button revealed in a tile's corner on hover — one click
-/// moves the tile to the Ignored list.
-struct TileIgnoreButton: View {
+/// Small round icon button revealed in a tile's corner on hover.
+struct TileHoverButton: View {
+    let symbol: String
     let help: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "eye.slash")
+            Image(systemName: symbol)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(4)
                 .background(Circle().fill(.thickMaterial))
         }
         .buttonStyle(.plain)
-        .padding(4)
         .help(help)
+    }
+}
+
+/// Eye-slash hover button — one click moves the tile to the Ignored list.
+struct TileIgnoreButton: View {
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        TileHoverButton(symbol: "eye.slash", help: help, action: action)
+    }
+}
+
+/// Copy hover button that flashes a checkmark after copying, so the click
+/// visibly did something even though nothing navigates.
+struct TileCopyButton: View {
+    let help: String
+    let copy: () -> Void
+    @State private var copied = false
+
+    var body: some View {
+        TileHoverButton(symbol: copied ? "checkmark" : "doc.on.doc", help: help) {
+            copy()
+            copied = true
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                copied = false
+            }
+        }
     }
 }
 

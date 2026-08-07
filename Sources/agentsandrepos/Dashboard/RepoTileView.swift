@@ -71,9 +71,29 @@ struct RepoTileView: View {
         }
         .overlay(alignment: .topTrailing) {
             if isHovering {
-                TileIgnoreButton(help: state.isWorktree ? "Ignore this worktree" : "Ignore this repo") {
-                    actions.ignoreRepo(path: state.path)
+                HStack(spacing: 2) {
+                    TileCopyButton(help: "Copy \"\(copyName)\"") {
+                        actions.copyText(copyName)
+                    }
+                    // Ignore lives inside this menu (with the other actions)
+                    // rather than as a bare corner button — one stray click
+                    // next to Copy shouldn't hide a repo.
+                    Menu {
+                        contextMenuItems
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(4)
+                            .background(Circle().fill(.thickMaterial))
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("More actions")
                 }
+                .padding(4)
             }
         }
         .onHover { isHovering = $0 }
@@ -81,6 +101,13 @@ struct RepoTileView: View {
         .onTapGesture { actions.openInFinder(path: state.path) }
         .contextMenu { contextMenuItems }
         .help(helpText)
+    }
+
+    /// What the copy button yields: the directory name — for worktrees that's
+    /// the checkout dir ("repo-slug"), not the "repo ⎇ slug" display title —
+    /// so it pastes cleanly into cd/CLI commands.
+    private var copyName: String {
+        (state.path as NSString).lastPathComponent
     }
 
     /// Each workflow-run row adds to the standard height so the grid row grows
@@ -151,6 +178,7 @@ struct RepoTileView: View {
             Button("Open on GitHub") { actions.openURL("https://github.com/\(gh)") }
             Button("Open Actions") { actions.openURL("https://github.com/\(gh)/actions") }
         }
+        Button("Copy Name") { actions.copyText(copyName) }
         Button("Copy Path") { actions.copyPath(state.path) }
         Divider()
         Button("Fetch Now") { actions.fetchRepo(path: state.path) }

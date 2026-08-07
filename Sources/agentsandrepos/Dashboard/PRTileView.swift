@@ -6,6 +6,7 @@ import SwiftUI
 struct PRTileView: View {
     let state: PRTileState
     let actions: DashboardActions
+    @State private var isHovering = false
 
     var body: some View {
         Tile(severity: state.severity) {
@@ -47,10 +48,21 @@ struct PRTileView: View {
             }
             .padding(9)
         }
+        .overlay(alignment: .topTrailing) {
+            if isHovering {
+                // "\(number)" pastes straight into `gh pr checkout`/`gh pr view`.
+                TileCopyButton(help: "Copy PR number \(state.number)") {
+                    actions.copyText(String(state.number))
+                }
+                .padding(4)
+            }
+        }
+        .onHover { isHovering = $0 }
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .onTapGesture { actions.openURL(state.url) }
         .contextMenu {
             Button("Open on GitHub") { actions.openURL(state.url) }
+            Button("Copy PR Number") { actions.copyText(String(state.number)) }
             Button("Copy URL") { actions.copyPath(state.url) }
             Button("Copy Branch Name") { actions.copyPath(state.branch) }
         }

@@ -386,9 +386,14 @@ extension Snapshot {
     }
 
     /// PR tiles: most recently updated first (unknown dates last), then by
-    /// repo name, then by PR number within a repo.
+    /// repo name, then by PR number within a repo. Two local clones of the
+    /// same GitHub repo fetch the same PRs — dedupe by URL (the tile id), or
+    /// the duplicated ForEach identity renders a blank cell in the grid.
     public var prTiles: [PRTileState] {
-        visiblePRs.map { PRTileState(pr: $0.pr, repoName: $0.repo.repo.name) }
+        var seen = Set<String>()
+        return visiblePRs
+            .filter { seen.insert($0.pr.url).inserted }
+            .map { PRTileState(pr: $0.pr, repoName: $0.repo.repo.name) }
             .sorted { lhs, rhs in
                 switch (lhs.updatedAt, rhs.updatedAt) {
                 case let (l?, r?) where l != r: return l > r

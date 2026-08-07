@@ -24,26 +24,34 @@ final class DashboardActions {
         }
     }
 
+    // Anything that sends the user to another app (browser, Finder, Terminal)
+    // dismisses the popover first — it's transient, and lingering over the
+    // newly focused window reads as a bug.
     func openURL(_ string: String) {
         guard let url = URL(string: string) else { return }
+        closePopover()
         NSWorkspace.shared.open(url)
     }
 
     func openInFinder(path: String) {
+        closePopover()
         NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: true))
     }
 
     func openInTerminal(path: String) {
+        closePopover()
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         proc.arguments = ["-a", "Terminal", path]
         try? proc.run()
     }
 
-    func copyPath(_ path: String) {
+    func copyText(_ text: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(path, forType: .string)
+        NSPasteboard.general.setString(text, forType: .string)
     }
+
+    func copyPath(_ path: String) { copyText(path) }
 
     func fetchRepo(path: String) { delegate?.fetchRepo(path: path) }
     func ignoreRepo(path: String) { delegate?.setRepoIgnored(path: path, ignored: true) }

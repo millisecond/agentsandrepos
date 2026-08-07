@@ -182,6 +182,21 @@ final class TileStateTests: XCTestCase {
         XCTAssertEqual(RepoTileState(repo: repo(git: nil)).severity, .muted)
     }
 
+    func testPRTilesDedupeAcrossClonesOfSameRemote() {
+        // Two local clones of the same GitHub repo fetch identical PRs; the
+        // grid must not render the same PR (same URL id) twice.
+        let shared = PullRequest(
+            number: 7, title: "t", url: "https://github.com/o/r/pull/7", isDraft: false,
+            author: "a", headRefName: "b", reviewDecision: nil, ci: .pass)
+        var snap = Snapshot.empty
+        snap.repos = [
+            repo(name: "clone-a", prs: [shared]),
+            repo(name: "clone-b", prs: [shared]),
+        ]
+        XCTAssertEqual(snap.prTiles.count, 1)
+        XCTAssertEqual(snap.prTiles[0].repoName, "clone-a")
+    }
+
     func testWorkflowRunSeverity() {
         // Failed run beats everything, like CI fail.
         XCTAssertEqual(
