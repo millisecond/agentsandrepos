@@ -182,6 +182,25 @@ final class TileStateTests: XCTestCase {
         XCTAssertEqual(RepoTileState(repo: repo(git: nil)).severity, .muted)
     }
 
+    func testNeedsLabelSpellsOutStateWorstFirst() {
+        let tile = RepoTileState(
+            repo: repo(
+                git: GitState(branch: "m", ahead: 3, dirty: 10, untracked: 2),
+                runs: [run(.failed)]))
+        XCTAssertEqual(tile.needsLabel, "Deploy failed · 10 modified · 2 new · 3 to push")
+    }
+
+    func testCleanRepoHasNoNeeds() {
+        XCTAssertNil(RepoTileState(repo: repo()).needsLabel)
+        XCTAssertNil(RepoTileState(repo: repo(runs: [run(.running)])).needsLabel)
+    }
+
+    func testWaitingAgentAndFailingPRAppearInNeeds() {
+        let tile = RepoTileState(
+            repo: repo(agents: [agent(.waiting(nil))], prs: [pr(.fail)]))
+        XCTAssertEqual(tile.needsLabel, "PR checks failing · agent waiting on input")
+    }
+
     func testPRTilesDedupeAcrossClonesOfSameRemote() {
         // Two local clones of the same GitHub repo fetch identical PRs; the
         // grid must not render the same PR (same URL id) twice.

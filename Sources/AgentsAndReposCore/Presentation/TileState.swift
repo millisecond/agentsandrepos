@@ -185,6 +185,28 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
             agentDots: agentDots)
     }
 
+    /// Plain-words statement of everything this checkout needs, worst first —
+    /// "Deploy failed · 10 modified · 2 new · 3 to push". Empty when clean
+    /// and synced, so callers can gate on "not green → say why".
+    public var needs: [String] {
+        var parts: [String] = []
+        if hasError { parts.append("fetch/status error") }
+        for run in runs where run.state == .failed {
+            parts.append("\(run.workflowName) failed")
+        }
+        if worstCI == .fail { parts.append("PR checks failing") }
+        if agentDots.contains(.attention) { parts.append("agent waiting on input") }
+        if dirty > 0 { parts.append("\(dirty) modified") }
+        if untracked > 0 { parts.append("\(untracked) new") }
+        if ahead > 0 { parts.append("\(ahead) to push") }
+        if behind > 0 { parts.append("\(behind) to pull") }
+        return parts
+    }
+
+    public var needsLabel: String? {
+        needs.isEmpty ? nil : needs.joined(separator: " · ")
+    }
+
     /// "repo ⎇ name", dropping a redundant "repo-" prefix from the worktree's
     /// directory name (Claude-managed worktrees are usually named "repo-slug").
     static func worktreeTitle(repoName: String, worktreeName: String) -> String {

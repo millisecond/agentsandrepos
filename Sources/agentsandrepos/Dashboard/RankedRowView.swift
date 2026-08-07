@@ -86,7 +86,6 @@ private struct RepoRowView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    badges
                 }
                 secondLine
             }
@@ -111,30 +110,17 @@ private struct RepoRowView: View {
         .contextMenu { RepoContextMenuItems(state: state, actions: actions) }
     }
 
-    /// Compact git badges only — words would fight the single line for room.
-    @ViewBuilder
-    private var badges: some View {
-        HStack(spacing: 3) {
-            if state.dirty > 0 {
-                CountBadge(symbol: "●", count: state.dirty, label: "modified", color: .orange, compact: true)
-            }
-            if state.untracked > 0 {
-                CountBadge(symbol: "+", count: state.untracked, label: "new", color: .yellow, compact: true)
-            }
-            if state.ahead > 0 {
-                CountBadge(symbol: "↑", count: state.ahead, label: "to push", color: .blue, compact: true)
-            }
-            if state.behind > 0 {
-                CountBadge(symbol: "↓", count: state.behind, label: "to pull", color: .purple, compact: true)
-            }
-        }
-    }
-
-    /// Workflow runs win the second line (they're why the row ranked up);
-    /// otherwise the LLM summary gets it; clean rows stay single-line.
+    /// Anything short of green states its needs in words, severity-colored —
+    /// the badges alone are too cryptic to act on. Green rows fall back to
+    /// live workflow runs, then the LLM summary.
     @ViewBuilder
     private var secondLine: some View {
-        if !state.runs.isEmpty {
+        if let needs = state.needsLabel {
+            Text(needs)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(Color(severity: state.severity))
+                .lineLimit(1)
+        } else if !state.runs.isEmpty {
             HStack(spacing: 10) {
                 ForEach(state.runs) { run in
                     ActionsRunRow(run: run) { actions.openURL(run.url) }
@@ -195,10 +181,17 @@ private struct PRRowView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text("⎇ \(state.branch) · \(state.author) · \(state.statusLabel)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text("⎇ \(state.branch) · \(state.author) ·")
+                        .foregroundStyle(.secondary)
+                    // The dominant fact ("CI failing", "changes requested")
+                    // wears the severity color so it can't be missed.
+                    Text(state.statusLabel)
+                        .fontWeight(.medium)
+                        .foregroundStyle(Color(severity: state.severity))
+                }
+                .font(.caption2)
+                .lineLimit(1)
             }
             Spacer(minLength: 8)
             if state.isDraft {
