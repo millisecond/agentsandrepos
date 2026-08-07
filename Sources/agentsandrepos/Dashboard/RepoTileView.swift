@@ -12,7 +12,7 @@ struct RepoTileView: View {
     @State private var isHovering = false
 
     var body: some View {
-        Tile(severity: state.severity) {
+        Tile(severity: state.severity, height: tileHeight) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .top) {
                     Text(state.name)
@@ -29,6 +29,14 @@ struct RepoTileView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                }
+                if !state.runs.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(state.runs) { run in
+                            ActionsRunRow(run: run) { actions.openURL(run.url) }
+                        }
+                    }
+                    .padding(.top, 1)
                 }
                 // Summary soaks up the tile's flexible middle; otherwise a
                 // plain spacer keeps badges pinned to the bottom.
@@ -73,6 +81,12 @@ struct RepoTileView: View {
         .onTapGesture { actions.openInFinder(path: state.path) }
         .contextMenu { contextMenuItems }
         .help(helpText)
+    }
+
+    /// Each workflow-run row adds to the standard height so the grid row grows
+    /// with the tile instead of squeezing the badges out the bottom.
+    private var tileHeight: CGFloat {
+        112 + CGFloat(state.runs.count) * 17
     }
 
     /// Git-state badge row; shows a green check when fully clean and synced.
@@ -135,6 +149,7 @@ struct RepoTileView: View {
         Button("Open in Terminal") { actions.openInTerminal(path: state.path) }
         if let gh = state.githubRepo {
             Button("Open on GitHub") { actions.openURL("https://github.com/\(gh)") }
+            Button("Open Actions") { actions.openURL("https://github.com/\(gh)/actions") }
         }
         Button("Copy Path") { actions.copyPath(state.path) }
         Divider()
@@ -162,6 +177,9 @@ struct RepoTileView: View {
         if state.ahead > 0 { parts.append("\(state.ahead) to push") }
         if state.behind > 0 { parts.append("\(state.behind) to pull") }
         if state.hasError { parts.append("⚠︎ fetch/status error") }
+        for run in state.runs {
+            parts.append("\(run.state.glyph) \(run.workflowName) \(run.state.rawValue)")
+        }
         if let text = summary.text { parts.append("— \(text)") }
         return parts.joined(separator: " ")
     }

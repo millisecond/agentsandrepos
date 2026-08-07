@@ -63,6 +63,14 @@ enum SnapshotCommand {
                 let draft = pr.isDraft ? " (draft)" : ""
                 lines.append("  \(pad(repo.repo.name, 20)) #\(pr.number) \(pr.title)\(ci)\(draft)")
             }
+            let runs = s.allRuns
+            if !runs.isEmpty {
+                lines.append("")
+                lines.append("Recent Actions:")
+                for (repo, run) in runs {
+                    lines.append("  \(pad(repo.repo.name, 20)) \(run.state.glyph) \(pad(run.workflowName, 20)) \(run.branch) (\(run.event), \(run.state.rawValue))")
+                }
+            }
         } else {
             lines.append("")
             switch s.ghAvailability {

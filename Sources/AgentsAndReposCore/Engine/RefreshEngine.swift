@@ -30,6 +30,7 @@ public actor RefreshEngine {
     private var agentDebouncer = AgentStatusDebouncer()
     private var activityMeter = AgentActivityMeter()
     private var prs: [String: [PullRequest]] = [:]
+    private var runs: [String: [WorkflowRun]] = [:]
     private var remoteInfo: [String: RemoteInfo] = [:]
 
     private var ghPath: String?
@@ -46,6 +47,14 @@ public actor RefreshEngine {
 
     private var loops: [Task<Void, Never>] = []
     private var started = false
+
+    /// Popover visibility, mirrored in by the app. Drives the on-open GitHub
+    /// refresh and keeps the actions watch loop alive while the user looks.
+    private var uiVisible = false
+    private var lastFullRunsSweepAt: Date = .distantPast
+    /// Fast follower for in-flight workflow runs; nil whenever the popover is
+    /// hidden and nothing is running, so idle cost is zero.
+    private var actionsWatchLoop: Task<Void, Never>?
 
     private var fsWatcher: FSEventsWatcher?
     private var watchedPaths: Set<String> = []
@@ -75,6 +84,8 @@ public actor RefreshEngine {
 
     public func stop() {
         cancelLoops()
+        actionsWatchLoop?.cancel()
+        actionsWatchLoop = nil
         fsWatcher = nil
         watchedPaths = []
         started = false
@@ -118,6 +129,7 @@ public actor RefreshEngine {
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.prTick()
+                await self.runsTick()
                 await self.publish()
                 try? await Task.sleep(for: .seconds(Double(max(1, await self.config.prIntervalMinutes)) * 60))
             }
@@ -138,6 +150,62 @@ public actor RefreshEngine {
         publish()
     }
 
+    /// Popover shown/hidden. On show, GitHub PR/actions data older than a
+    /// minute refreshes immediately, and the actions watch loop spins up to
+    /// follow anything running while the popover stays open.
+    public func setUIVisible(_ visible: Bool) async {
+        guard visible != uiVisible else { return }
+        uiVisible = visible
+        guard visible else { return }  // hidden: watch loop winds down itself
+        if Date().timeIntervalSince(lastFullRunsSweepAt) > 60 {
+            await prTick()
+            await runsTick()
+            publish()
+        } else {
+            startActionsWatchIfNeeded()
+        }
+    }
+
+    // MARK: - Actions watch loop
+
+    private var runningActionPaths: Set<String> {
+        Set(runs.filter { $0.value.contains { $0.state == .running } }.map(\.key))
+    }
+
+    /// Runs while the popover is visible or any workflow run is in flight —
+    /// checked every 20s, and exits the moment neither holds. Ticks are
+    /// targeted at repos with running actions (O(active), not O(repos));
+    /// while the popover is open a full sweep happens at most once a minute
+    /// to pick up newly started runs.
+    private func startActionsWatchIfNeeded() {
+        guard started else { return }  // `snapshot` CLI runs without loops
+        guard actionsWatchLoop == nil else { return }
+        guard uiVisible || !runningActionPaths.isEmpty else { return }
+        actionsWatchLoop = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                guard let self else { return }
+                if await self.actionsWatchTick() { return }
+            }
+        }
+    }
+
+    /// Returns true when the watch is done and the loop should exit.
+    private func actionsWatchTick() async -> Bool {
+        let active = runningActionPaths
+        if !uiVisible, active.isEmpty {
+            actionsWatchLoop = nil
+            return true
+        }
+        if uiVisible, Date().timeIntervalSince(lastFullRunsSweepAt) > 60 {
+            await runsTick()
+        } else if !active.isEmpty {
+            await runsTick(only: active)
+        }
+        publish()
+        return false
+    }
+
     /// Agents only — for the ~/.claude/sessions watcher, which fires on every
     /// session-file rewrite (constantly while agents work). Repo status has
     /// its own FSEvents path and poll loop; sweeping `git status` across all
@@ -155,6 +223,7 @@ public actor RefreshEngine {
         publish()
         await fetchTick(force: true)
         await prTick()
+        await runsTick()
         publish()
     }
 
@@ -231,7 +300,10 @@ public actor RefreshEngine {
         await discoverTick()
         agentsTick()
         await statusTick()
-        if includePRs { await prTick() }
+        if includePRs {
+            await prTick()
+            await runsTick()
+        }
         return currentSnapshot()
     }
 
@@ -258,6 +330,7 @@ public actor RefreshEngine {
         let valid = Set(found.map(\.path))
         worktreesByRepo = worktreesByRepo.filter { valid.contains($0.key) }
         prs = prs.filter { valid.contains($0.key) }
+        runs = runs.filter { valid.contains($0.key) }
         rebuildWatcherIfNeeded()
     }
 
@@ -350,6 +423,8 @@ public actor RefreshEngine {
     private func runPRNudge(_ repoPaths: Set<String>) async {
         prNudgePending.subtract(repoPaths)
         await prTick(only: repoPaths)
+        // A push usually kicks workflows on the same repo — check those too.
+        await runsTick(only: repoPaths)
         publish()
     }
 
@@ -470,33 +545,57 @@ public actor RefreshEngine {
         }
     }
 
-    private func prTick(only: Set<String>? = nil) async {
+    /// Locates gh and (re)probes auth at most every 15 min. Nil unless usable.
+    private func ghReady() async -> String? {
         if ghPath == nil { ghPath = GHClient.findBinary() }
         guard let gh = ghPath else {
             ghAvailability = .notInstalled
-            return
+            return nil
         }
         if ghAvailability != .ok || Date().timeIntervalSince(lastGHProbe) > 900 {
             ghAvailability = await GHClient.probe(gh)
             lastGHProbe = Date()
         }
-        guard ghAvailability == .ok else { return }
+        return ghAvailability == .ok ? gh : nil
+    }
 
-        let githubRepos = repos.compactMap { repo -> (Repo, String)? in
+    private func githubRepos(only: Set<String>?) -> [(Repo, String)] {
+        repos.compactMap { repo -> (Repo, String)? in
             guard only == nil || only?.contains(repo.path) == true else { return nil }
             guard let owner = remoteInfo[repo.path]?.github else { return nil }
             return (repo, owner)
         }
+    }
+
+    private func prTick(only: Set<String>? = nil) async {
+        guard let gh = await ghReady() else { return }
         let mineOnly = config.prScope == .mine
-        await forEachCapped(githubRepos, cap: 3) { (repo, owner) in
+        await forEachCapped(githubRepos(only: only), cap: 3) { (repo, owner) in
             if let list = await GHClient.listOpenPRs(gh, ownerRepo: owner, mineOnly: mineOnly) {
                 await self.storePRs(repo.path, list)
             }
         }
     }
 
+    /// One gh spawn per repo — the 5-minute loop is the accepted budget for a
+    /// full sweep; the actions watch loop passes `only` to stay O(active runs).
+    private func runsTick(only: Set<String>? = nil) async {
+        guard let gh = await ghReady() else { return }
+        await forEachCapped(githubRepos(only: only), cap: 3) { (repo, owner) in
+            if let recent = await GHClient.listRecentRuns(gh, ownerRepo: owner) {
+                await self.storeRuns(repo.path, recent)
+            }
+        }
+        if only == nil { lastFullRunsSweepAt = Date() }
+        startActionsWatchIfNeeded()
+    }
+
     private func storePRs(_ repoPath: String, _ list: [PullRequest]) {
         prs[repoPath] = list
+    }
+
+    private func storeRuns(_ repoPath: String, _ list: [WorkflowRun]) {
+        runs[repoPath] = list
     }
 
     // MARK: - Snapshot assembly
@@ -537,7 +636,8 @@ public actor RefreshEngine {
                 agents: agentsByPath[repo.path] ?? [],
                 prs: prs[repo.path] ?? [],
                 worktrees: wts,
-                githubRepo: remoteInfo[repo.path]?.github)
+                githubRepo: remoteInfo[repo.path]?.github,
+                runs: runs[repo.path] ?? [])
         }
         return Snapshot(
             repos: overviews,

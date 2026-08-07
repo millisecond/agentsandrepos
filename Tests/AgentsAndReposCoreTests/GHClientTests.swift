@@ -44,4 +44,69 @@ final class GHClientTests: XCTestCase {
     func testParseGarbage() {
         XCTAssertNil(GHClient.parsePRList(Data("nope".utf8)))
     }
+
+    func testParseRunList() throws {
+        let now = try XCTUnwrap(try? Date("2026-08-07T12:00:00Z", strategy: .iso8601))
+        let json = """
+            [
+              {"databaseId": 1, "workflowName": "Deploy", "displayTitle": "ship it",
+               "status": "in_progress", "conclusion": null, "headBranch": "main",
+               "event": "push", "url": "https://github.com/o/r/actions/runs/1",
+               "updatedAt": "2026-08-07T11:59:00Z"},
+              {"databaseId": 2, "workflowName": "Deploy", "displayTitle": "older",
+               "status": "completed", "conclusion": "success", "headBranch": "main",
+               "event": "push", "url": "https://github.com/o/r/actions/runs/2",
+               "updatedAt": "2026-08-07T11:30:00Z"},
+              {"databaseId": 3, "workflowName": "PR Check", "displayTitle": "pr",
+               "status": "in_progress", "conclusion": null, "headBranch": "feature",
+               "event": "pull_request", "url": "https://github.com/o/r/actions/runs/3",
+               "updatedAt": "2026-08-07T11:59:00Z"},
+              {"databaseId": 6, "workflowName": "Labeler", "displayTitle": "label",
+               "status": "completed", "conclusion": "success", "headBranch": "feature",
+               "event": "pull_request_target", "url": "https://github.com/o/r/actions/runs/6",
+               "updatedAt": "2026-08-07T11:59:00Z"},
+              {"databaseId": 4, "workflowName": "Nightly", "displayTitle": "cron",
+               "status": "completed", "conclusion": "failure", "headBranch": "main",
+               "event": "schedule", "url": "https://github.com/o/r/actions/runs/4",
+               "updatedAt": "2026-08-07T11:45:00Z"},
+              {"databaseId": 5, "workflowName": "Stale", "displayTitle": "old",
+               "status": "completed", "conclusion": "success", "headBranch": "main",
+               "event": "push", "url": "https://github.com/o/r/actions/runs/5",
+               "updatedAt": "2026-08-07T09:00:00Z"}
+            ]
+            """
+        let runs = try XCTUnwrap(GHClient.parseRunList(Data(json.utf8), now: now))
+        // Run 2 deduped (same workflow as 1), run 3 is a PR event, run 5 aged out.
+        XCTAssertEqual(runs.map(\.id), [1, 4])
+        XCTAssertEqual(runs[0].state, .running)
+        XCTAssertEqual(runs[0].workflowName, "Deploy")
+        XCTAssertEqual(runs[1].state, .failed)
+    }
+
+    func testParseRunListGarbage() {
+        XCTAssertNil(GHClient.parseRunList(Data("nope".utf8), now: Date()))
+    }
+
+    func testReduceRun() {
+        XCTAssertEqual(GHClient.reduceRun(status: "queued", conclusion: nil), .running)
+        XCTAssertEqual(GHClient.reduceRun(status: "in_progress", conclusion: nil), .running)
+        XCTAssertEqual(GHClient.reduceRun(status: "completed", conclusion: "success"), .passed)
+        XCTAssertEqual(GHClient.reduceRun(status: "completed", conclusion: "failure"), .failed)
+        XCTAssertEqual(GHClient.reduceRun(status: "completed", conclusion: "timed_out"), .failed)
+        XCTAssertEqual(GHClient.reduceRun(status: "completed", conclusion: "cancelled"), .other)
+        XCTAssertEqual(GHClient.reduceRun(status: "completed", conclusion: "skipped"), .other)
+    }
+
+    func testWorstRunState() {
+        func run(_ state: WorkflowRun.State, id: Int = 1) -> WorkflowRun {
+            WorkflowRun(
+                id: id, workflowName: "w", title: "t", branch: "main", event: "push",
+                state: state, url: "u")
+        }
+        XCTAssertNil(WorkflowRun.worstState(of: []))
+        XCTAssertEqual(WorkflowRun.worstState(of: [run(.passed), run(.failed)]), .failed)
+        XCTAssertEqual(WorkflowRun.worstState(of: [run(.passed), run(.running)]), .running)
+        XCTAssertEqual(WorkflowRun.worstState(of: [run(.other), run(.passed)]), .passed)
+        XCTAssertEqual(WorkflowRun.worstState(of: [run(.other)]), .other)
+    }
 }

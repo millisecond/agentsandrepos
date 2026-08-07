@@ -92,6 +92,11 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     public let prCount: Int
     public let worstCI: PullRequest.CIStatus
 
+    /// Recent repo-level workflow runs (deploys, dispatches). Worktree tiles
+    /// never carry these — runs belong to the repo, not a checkout.
+    public let runs: [WorkflowRun]
+    public let worstRun: WorkflowRun.State?
+
     /// One severity per agent working directly in this tile's checkout.
     /// Worktree agents dot their own worktree tile, not the parent repo's.
     public let agentDots: [TileSeverity]
@@ -128,13 +133,17 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.prCount = prs.count
         self.worstCI = Self.worstCI(of: prs)
 
+        self.runs = r.runs
+        self.worstRun = WorkflowRun.worstState(of: r.runs)
+
         self.agentDots = Self.dots(of: r.agents)
         self.worktrees = r.worktrees.map {
             WorktreeTileState(worktree: $0, repoName: r.repo.name)
         }
 
         self.severity = Self.severity(
-            hasError: hasError, worstCI: worstCI, git: git, agentDots: agentDots)
+            hasError: hasError, worstCI: worstCI, worstRun: worstRun, git: git,
+            agentDots: agentDots)
     }
 
     public init(worktree wt: WorktreeOverview, parent r: RepoOverview) {
@@ -165,11 +174,15 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.prCount = prs.count
         self.worstCI = Self.worstCI(of: prs)
 
+        self.runs = []
+        self.worstRun = nil
+
         self.agentDots = Self.dots(of: wt.agents)
         self.worktrees = []
 
         self.severity = Self.severity(
-            hasError: hasError, worstCI: worstCI, git: git, agentDots: agentDots)
+            hasError: hasError, worstCI: worstCI, worstRun: nil, git: git,
+            agentDots: agentDots)
     }
 
     /// "repo ⎇ name", dropping a redundant "repo-" prefix from the worktree's
@@ -214,16 +227,19 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         return worst
     }
 
-    /// Precedence: CI-fail/error → urgent > dirty/untracked or waiting agent →
-    /// attention > ahead/behind or busy agent → info > clean → ok > no git → muted.
+    /// Precedence: CI/run-fail/error → urgent > dirty/untracked or waiting agent →
+    /// attention > ahead/behind, running action, or busy agent → info > clean → ok
+    /// > no git → muted.
     static func severity(
-        hasError: Bool, worstCI: PullRequest.CIStatus, git: GitState?,
-        agentDots: [TileSeverity]
+        hasError: Bool, worstCI: PullRequest.CIStatus, worstRun: WorkflowRun.State?,
+        git: GitState?, agentDots: [TileSeverity]
     ) -> TileSeverity {
-        if hasError || worstCI == .fail { return .urgent }
+        if hasError || worstCI == .fail || worstRun == .failed { return .urgent }
         guard let git else { return .muted }
         if !git.isClean || agentDots.contains(.attention) { return .attention }
-        if git.ahead > 0 || git.behind > 0 || agentDots.contains(.info) { return .info }
+        if git.ahead > 0 || git.behind > 0 || agentDots.contains(.info)
+            || worstRun == .running
+        { return .info }
         return .ok
     }
 }

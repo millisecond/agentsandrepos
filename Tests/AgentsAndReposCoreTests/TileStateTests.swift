@@ -18,11 +18,18 @@ final class TileStateTests: XCTestCase {
     private func repo(
         name: String = "repo", git: GitState? = GitState(branch: "main"),
         agents: [AgentSession] = [], prs: [PullRequest] = [],
-        worktrees: [WorktreeOverview] = []
+        worktrees: [WorktreeOverview] = [], runs: [WorkflowRun] = []
     ) -> RepoOverview {
         RepoOverview(
             repo: Repo(path: "/p/\(name)", name: name, root: "/p"),
-            git: git, agents: agents, prs: prs, worktrees: worktrees, githubRepo: nil)
+            git: git, agents: agents, prs: prs, worktrees: worktrees, githubRepo: nil,
+            runs: runs)
+    }
+
+    private func run(_ state: WorkflowRun.State, workflow: String = "Deploy") -> WorkflowRun {
+        WorkflowRun(
+            id: 1, workflowName: workflow, title: "t", branch: "main", event: "push",
+            state: state, url: "u")
     }
 
     private func pr(_ ci: PullRequest.CIStatus, number: Int = 1) -> PullRequest {
@@ -173,6 +180,36 @@ final class TileStateTests: XCTestCase {
         XCTAssertEqual(RepoTileState(repo: repo()).severity, .ok)
         // No git state yet is muted.
         XCTAssertEqual(RepoTileState(repo: repo(git: nil)).severity, .muted)
+    }
+
+    func testWorkflowRunSeverity() {
+        // Failed run beats everything, like CI fail.
+        XCTAssertEqual(
+            RepoTileState(repo: repo(git: GitState(branch: "m", dirty: 3), runs: [run(.failed)]))
+                .severity,
+            .urgent)
+        // Running action on a clean repo is info.
+        XCTAssertEqual(
+            RepoTileState(repo: repo(runs: [run(.running)])).severity, .info)
+        // Passed run doesn't change a clean repo's ok.
+        XCTAssertEqual(
+            RepoTileState(repo: repo(runs: [run(.passed)])).severity, .ok)
+        // Worst-run rollup lands on the tile.
+        let tile = RepoTileState(
+            repo: repo(runs: [run(.passed), run(.running, workflow: "Nightly")]))
+        XCTAssertEqual(tile.worstRun, .running)
+        XCTAssertEqual(tile.runs.count, 2)
+    }
+
+    func testWorktreeTileCarriesNoRuns() {
+        let wt = WorktreeOverview(
+            worktree: Worktree(path: "/p/r-b", branch: "b", detached: false, isClaudeManaged: false),
+            git: GitState(branch: "b"), agents: [])
+        let overview = repo(worktrees: [wt], runs: [run(.failed)])
+        let tile = RepoTileState(worktree: wt, parent: overview)
+        XCTAssertTrue(tile.runs.isEmpty)
+        XCTAssertNil(tile.worstRun)
+        XCTAssertNotEqual(tile.severity, .urgent)
     }
 
     func testWorstCIOrdering() {

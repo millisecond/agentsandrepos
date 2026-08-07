@@ -14,15 +14,18 @@ extension Color {
 }
 
 /// Square card container: rounded rect with a severity-tinted border and a
-/// faint severity wash so state reads at a glance.
+/// faint severity wash so state reads at a glance. Height is fixed (not a
+/// minimum) so grid rows stay deterministic; tiles that need more room pass
+/// a larger value.
 struct Tile<Content: View>: View {
     let severity: TileSeverity
+    var height: CGFloat = 112
     @ViewBuilder var content: Content
 
     var body: some View {
         content
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .frame(height: 112)
+            .frame(height: height)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color(severity: severity).opacity(severity == .muted ? 0.04 : 0.09))
@@ -89,6 +92,66 @@ struct PRIndicator: View {
         case .fail: return .red
         case .pending: return .yellow
         case .none: return .clear
+        }
+    }
+}
+
+/// One wordy line per recent repo-level workflow run (deploys, dispatches —
+/// not PR checks): "Deploy · running · 2 minutes ago". Clicking opens the
+/// run on GitHub.
+struct ActionsRunRow: View {
+    let run: WorkflowRun
+    let open: () -> Void
+
+    private static let relative: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color(runState: run.state))
+            Text(run.workflowName)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+            Text(stateText)
+                .font(.caption2)
+                .foregroundStyle(Color(runState: run.state))
+                .lineLimit(1)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: open)
+        .help("\(run.workflowName): \(run.title) — \(run.branch) (\(run.event)), click to open")
+    }
+
+    private var symbol: String {
+        switch run.state {
+        case .running: return "arrow.triangle.2.circlepath"
+        case .passed: return "checkmark.circle.fill"
+        case .failed: return "xmark.circle.fill"
+        case .other: return "minus.circle"
+        }
+    }
+
+    private var stateText: String {
+        var text = "· \(run.state.rawValue)"
+        if let date = run.updatedAt {
+            text += " · \(Self.relative.localizedString(for: date, relativeTo: Date()))"
+        }
+        return text
+    }
+}
+
+extension Color {
+    init(runState: WorkflowRun.State) {
+        switch runState {
+        case .running: self = .yellow
+        case .passed: self = .green
+        case .failed: self = .red
+        case .other: self = .secondary
         }
     }
 }

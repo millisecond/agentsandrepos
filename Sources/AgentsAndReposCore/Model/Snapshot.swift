@@ -27,12 +27,14 @@ public struct RepoOverview: Sendable, Equatable, Identifiable {
     public let worktrees: [WorktreeOverview]
     /// "owner/name" when origin points at github.com.
     public let githubRepo: String?
+    /// Recent repo-level workflow runs (non-PR events; see GHClient.parseRunList).
+    public let runs: [WorkflowRun]
 
     public var id: String { repo.path }
 
     public init(
         repo: Repo, git: GitState?, agents: [AgentSession], prs: [PullRequest],
-        worktrees: [WorktreeOverview], githubRepo: String?
+        worktrees: [WorktreeOverview], githubRepo: String?, runs: [WorkflowRun] = []
     ) {
         self.repo = repo
         self.git = git
@@ -40,6 +42,7 @@ public struct RepoOverview: Sendable, Equatable, Identifiable {
         self.prs = prs
         self.worktrees = worktrees
         self.githubRepo = githubRepo
+        self.runs = runs
     }
 
     public var allAgents: [AgentSession] { agents + worktrees.flatMap(\.agents) }
@@ -109,5 +112,9 @@ public struct Snapshot: Sendable, Equatable {
 
     public var allPRs: [(repo: RepoOverview, pr: PullRequest)] {
         repos.flatMap { r in r.prs.map { (r, $0) } }
+    }
+
+    public var allRuns: [(repo: RepoOverview, run: WorkflowRun)] {
+        repos.flatMap { r in r.runs.map { (r, $0) } }
     }
 }

@@ -29,6 +29,10 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
 
     var isShown: Bool { popover.isShown }
 
+    /// Fires with true on show and false on close — the engine uses this to
+    /// front-run GitHub refreshes and follow in-flight workflow runs.
+    var onVisibilityChange: ((Bool) -> Void)?
+
     private let summaries: SummaryService
     private let store: SnapshotStore
     private let perf: PerfMonitor
@@ -77,6 +81,7 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
         popover.contentViewController?.view.window?.makeKey()
         // LLM summaries only generate while the popover is visible (battery).
         summaries.setPopoverVisible(true)
+        onVisibilityChange?(true)
         // Foreground CPU (rendering, summaries) doesn't count against the
         // background-CPU watchdog.
         perf.setPopoverVisible(true)
@@ -102,6 +107,7 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
             self.summaries.setPopoverVisible(false)
             self.perf.setPopoverVisible(false)
             self.store.setLive(false)
+            self.onVisibilityChange?(false)
         }
     }
 

@@ -52,6 +52,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let engine = engine!
         Task { await engine.start() }
 
+        popoverController.onVisibilityChange = { visible in
+            Task { await engine.setUIVisible(visible) }
+        }
+
         // Session files rewrite constantly while agents work; only the agent
         // list needs refreshing here. Repo status has its own FSEvents path —
         // a kickLight would sweep `git status` across every repo per rewrite.
