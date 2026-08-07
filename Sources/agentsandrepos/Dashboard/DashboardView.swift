@@ -133,11 +133,10 @@ struct DashboardView: View {
     /// below the agents instead of being spread across three sections.
     @ViewBuilder
     private func rankedSection(_ snap: Snapshot) -> some View {
-        let scope = snap.config.prScope == .mine ? "My PRs" : "All PRs"
         let section = snap.rankedSection(now: Date())
         VStack(alignment: .leading, spacing: 8) {
             ExpandableSectionHeader(
-                title: "Needs Attention · Repos & \(scope)", section: .ranked,
+                title: "Repos, PRs, and Worktrees", section: .ranked,
                 totalCount: section.totalCount, isExpanded: section.isExpanded,
                 canToggle: section.canToggle, actions: actions)
             switch snap.ghAvailability {
