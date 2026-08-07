@@ -172,6 +172,17 @@ private struct RepoRowView: View {
             trailing
         }
         .modifier(RowChrome(severity: state.severity))
+        // Floating (overlay = zero layout impact) so hover never shifts the
+        // row's own content around.
+        .overlay(alignment: .bottomTrailing) {
+            if isHovering {
+                ClickDestinationHint(
+                    symbol: primaryURL != nil ? "globe" : "folder",
+                    label: primaryURL != nil ? "GitHub" : "Finder")
+                    .padding(3)
+                    .allowsHitTesting(false)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
         // The row's click goes where the top problem can be acted on — a
@@ -244,9 +255,6 @@ private struct RepoRowView: View {
     private var trailing: some View {
         if isHovering {
             HStack(spacing: 2) {
-                ClickDestinationHint(
-                    symbol: primaryURL != nil ? "globe" : "folder",
-                    label: primaryURL != nil ? "GitHub" : "Finder")
                 TileCopyButton(help: "Copy \"\(RepoTileView.copyName(for: state))\"") {
                     actions.copyText(RepoTileView.copyName(for: state))
                 }
@@ -317,6 +325,13 @@ private struct PRRowView: View {
             trailing
         }
         .modifier(RowChrome(severity: state.severity))
+        .overlay(alignment: .bottomTrailing) {
+            if isHovering {
+                ClickDestinationHint(symbol: "globe", label: "GitHub")
+                    .padding(3)
+                    .allowsHitTesting(false)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
         .onTapGesture { actions.openURL(state.url) }
@@ -332,11 +347,8 @@ private struct PRRowView: View {
     @ViewBuilder
     private var trailing: some View {
         if isHovering {
-            HStack(spacing: 2) {
-                ClickDestinationHint(symbol: "globe", label: "GitHub")
-                TileCopyButton(help: "Copy PR number \(state.number)") {
-                    actions.copyText(String(state.number))
-                }
+            TileCopyButton(help: "Copy PR number \(state.number)") {
+                actions.copyText(String(state.number))
             }
         } else {
             AgoText(date: state.updatedAt)
