@@ -1,0 +1,16 @@
+name: Deploy
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Simulated deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate a ~1 minute deploy
+        run: |
+          echo "Starting simulated deploy..."
+          sleep 60
+          echo "Deploy complete."

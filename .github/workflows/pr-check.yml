@@ -1,0 +1,14 @@
+name: PR Check
+on:
+  pull_request:
+
+jobs:
+  check:
+    name: Slow PR check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate a ~1 minute check
+        run: |
+          echo "Starting simulated PR check..."
+          sleep 60
+          echo "PR check passed."
