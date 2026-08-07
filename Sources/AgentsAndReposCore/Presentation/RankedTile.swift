@@ -79,11 +79,13 @@ public enum RankedTile: Sendable, Equatable, Identifiable {
 extension Snapshot {
     /// Everything below the agents section, stack-ranked: repos, worktrees,
     /// and PRs in one list, most urgent-and-recent first. Ties break by
-    /// recency, then name, so the order is deterministic.
+    /// recency, then name, so the order is deterministic. Repos whose only
+    /// problem is an unreachable remote are lumped into `unreachableTiles`
+    /// instead — see `isQuietUnreachable`.
     public func rankedTiles(now: Date = Date()) -> [RankedTile] {
         let all =
-            repoTiles.map(RankedTile.repo)
-            + worktreeTiles.map(RankedTile.repo)
+            repoTiles.filter { !$0.isQuietUnreachable }.map(RankedTile.repo)
+            + worktreeTiles.filter { !$0.isQuietUnreachable }.map(RankedTile.repo)
             + prTiles.map(RankedTile.pr)
         return all
             .map { (tile: $0, score: $0.score(now: now)) }
@@ -99,6 +101,13 @@ extension Snapshot {
                     == .orderedAscending
             }
             .map(\.tile)
+    }
+
+    /// Repos (and worktrees) excluded from the ranked list because their only
+    /// issue is a fetch failure — collapsed into one "can't connect" row.
+    /// Recency-ordered for when the lump is expanded.
+    public var unreachableTiles: [RepoTileState] {
+        (repoTiles + worktreeTiles).filter(\.isQuietUnreachable)
     }
 
     /// Rows are ~3× denser than tiles, so the ranked feed defaults to a

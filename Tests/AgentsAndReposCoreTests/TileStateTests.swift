@@ -160,10 +160,20 @@ final class TileStateTests: XCTestCase {
         XCTAssertEqual(
             RepoTileState(repo: repo(git: GitState(branch: "m", dirty: 3), prs: [pr(.fail)])).severity,
             .urgent)
-        // Fetch error is urgent.
+        // Status error (local git breakage) is urgent.
         XCTAssertEqual(
-            RepoTileState(repo: repo(git: GitState(branch: "m", fetchError: "boom"))).severity,
+            RepoTileState(repo: repo(git: GitState(branch: "m", statusError: "boom"))).severity,
             .urgent)
+        // Fetch error alone is NOT urgent — an unreachable clean repo reads
+        // muted (unknown), or work machines drown in wrong-account repos.
+        XCTAssertEqual(
+            RepoTileState(repo: repo(git: GitState(branch: "m", fetchError: "auth"))).severity,
+            .muted)
+        // But local work on an unreachable repo still ranks on its merits.
+        XCTAssertEqual(
+            RepoTileState(
+                repo: repo(git: GitState(branch: "m", dirty: 1, fetchError: "auth"))).severity,
+            .attention)
         // Dirty is attention.
         XCTAssertEqual(
             RepoTileState(repo: repo(git: GitState(branch: "m", dirty: 1))).severity, .attention)
@@ -199,6 +209,22 @@ final class TileStateTests: XCTestCase {
         let tile = RepoTileState(
             repo: repo(agents: [agent(.waiting(nil))], prs: [pr(.fail)]))
         XCTAssertEqual(tile.needsLabel, "PR checks failing · agent waiting on input")
+    }
+
+    func testQuietUnreachableDetection() {
+        XCTAssertTrue(
+            RepoTileState(repo: repo(git: GitState(branch: "m", fetchError: "auth")))
+                .isQuietUnreachable)
+        XCTAssertFalse(
+            RepoTileState(repo: repo(git: GitState(branch: "m", dirty: 1, fetchError: "auth")))
+                .isQuietUnreachable)
+        XCTAssertFalse(RepoTileState(repo: repo()).isQuietUnreachable)
+    }
+
+    func testUnreachableAppearsLastInNeeds() {
+        let tile = RepoTileState(
+            repo: repo(git: GitState(branch: "m", dirty: 2, fetchError: "auth")))
+        XCTAssertEqual(tile.needsLabel, "2 modified · can't connect")
     }
 
     func testPRTilesDedupeAcrossClonesOfSameRemote() {

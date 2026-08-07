@@ -20,7 +20,7 @@ struct RankedRowView: View {
 }
 
 /// Shared row chrome: severity-tinted rounded border, hover tracking.
-private struct RowChrome: ViewModifier {
+struct RowChrome: ViewModifier {
     let severity: TileSeverity
 
     func body(content: Content) -> some View {
@@ -61,6 +61,50 @@ private struct AgoText: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
+        }
+    }
+}
+
+/// One muted summary row standing in for every repo whose only problem is an
+/// unreachable remote (wrong GitHub account, no network). Keeps a work
+/// machine's dozens of auth failures from flooding the ranked list; expands
+/// on demand into the usual rows.
+struct UnreachableLumpView: View {
+    let tiles: [RepoTileState]
+    let isExpanded: Bool
+    let actions: DashboardActions
+
+    var body: some View {
+        VStack(spacing: 5) {
+            HStack(spacing: 8) {
+                Image(systemName: "bolt.horizontal.circle")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(tiles.count == 1
+                        ? "1 repo can't connect"
+                        : "\(tiles.count) repos can't connect")
+                        .font(.callout.weight(.semibold))
+                    Text("fetch failing — wrong GitHub account? try `gh auth switch`")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Button(isExpanded ? "Hide" : "Show") {
+                    actions.setSectionExpanded(.unreachable, expanded: !isExpanded)
+                }
+                .buttonStyle(.borderless)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            .modifier(RowChrome(severity: .muted))
+            if isExpanded {
+                ForEach(tiles) { tile in
+                    RankedRowView(item: .repo(tile), actions: actions)
+                }
+            }
         }
     }
 }

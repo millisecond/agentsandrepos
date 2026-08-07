@@ -59,7 +59,11 @@ final class SummaryFactsTests: XCTestCase {
         XCTAssertEqual(
             SummaryFacts.repoPlan(
                 RepoTileState(repo: repo(git: GitState(branch: "m", fetchError: "boom")))),
-            .fixed("Git fetch or status failing."))
+            .fixed("Can't reach remote."))
+        XCTAssertEqual(
+            SummaryFacts.repoPlan(
+                RepoTileState(repo: repo(git: GitState(branch: "m", statusError: "boom")))),
+            .fixed("Git status failing."))
     }
 
     func testDirtyRepoPlanGeneratesFromNamingSignal() {

@@ -76,7 +76,12 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     public let isClaudeManaged: Bool
 
     public let severity: TileSeverity
+    /// Local git breakage (`git status` itself failing) — genuinely urgent.
     public let hasError: Bool
+    /// The remote can't be reached (fetch failing: wrong account, no network).
+    /// Deliberately NOT urgent — on a machine signed into the wrong GitHub
+    /// account this is most repos, and it would drown the ranked list.
+    public let unreachable: Bool
     public let dirty: Int
     public let untracked: Int
     public let ahead: Int
@@ -117,7 +122,8 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         } else {
             self.branch = git?.branch ?? "…"
         }
-        self.hasError = git?.fetchError != nil || git?.statusError != nil
+        self.hasError = git?.statusError != nil
+        self.unreachable = git?.fetchError != nil
         self.dirty = git?.dirty ?? 0
         self.untracked = git?.untracked ?? 0
         self.ahead = git?.ahead ?? 0
@@ -143,7 +149,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
 
         self.severity = Self.severity(
             hasError: hasError, worstCI: worstCI, worstRun: worstRun, git: git,
-            agentDots: agentDots)
+            agentDots: agentDots, unreachable: unreachable)
     }
 
     public init(worktree wt: WorktreeOverview, parent r: RepoOverview) {
@@ -161,7 +167,8 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         } else {
             self.branch = branchName ?? "…"
         }
-        self.hasError = git?.fetchError != nil || git?.statusError != nil
+        self.hasError = git?.statusError != nil
+        self.unreachable = git?.fetchError != nil
         self.dirty = git?.dirty ?? 0
         self.untracked = git?.untracked ?? 0
         self.ahead = git?.ahead ?? 0
@@ -182,7 +189,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
 
         self.severity = Self.severity(
             hasError: hasError, worstCI: worstCI, worstRun: nil, git: git,
-            agentDots: agentDots)
+            agentDots: agentDots, unreachable: unreachable)
     }
 
     /// Plain-words statement of everything this checkout needs, worst first —
@@ -190,7 +197,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     /// and synced, so callers can gate on "not green → say why".
     public var needs: [String] {
         var parts: [String] = []
-        if hasError { parts.append("fetch/status error") }
+        if hasError { parts.append("git status error") }
         for run in runs where run.state == .failed {
             parts.append("\(run.workflowName) failed")
         }
@@ -200,7 +207,20 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         if untracked > 0 { parts.append("\(untracked) new") }
         if ahead > 0 { parts.append("\(ahead) to push") }
         if behind > 0 { parts.append("\(behind) to pull") }
+        // Last: it explains stale remote data, but must never shout over
+        // real local work.
+        if unreachable { parts.append("can't connect") }
         return parts
+    }
+
+    /// The only thing wrong is that the remote can't be reached — no local
+    /// work, nothing failing. These lump into one summary row instead of
+    /// flooding the ranked list (work machines often can't auth to most
+    /// personal repos and vice versa).
+    public var isQuietUnreachable: Bool {
+        unreachable && !hasError && dirty == 0 && untracked == 0 && ahead == 0
+            && behind == 0 && worstCI != .fail && worstRun != .failed
+            && !agentDots.contains(.attention)
     }
 
     public var needsLabel: String? {
@@ -249,12 +269,14 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         return worst
     }
 
-    /// Precedence: CI/run-fail/error → urgent > dirty/untracked or waiting agent →
-    /// attention > ahead/behind, running action, or busy agent → info > clean → ok
-    /// > no git → muted.
+    /// Precedence: CI/run-fail or status error → urgent > dirty/untracked or
+    /// waiting agent → attention > ahead/behind, running action, or busy agent
+    /// → info > clean → ok > no git or unreachable-remote → muted. A fetch
+    /// error alone never raises severity — an unreachable clean repo is an
+    /// unknown, not an emergency.
     static func severity(
         hasError: Bool, worstCI: PullRequest.CIStatus, worstRun: WorkflowRun.State?,
-        git: GitState?, agentDots: [TileSeverity]
+        git: GitState?, agentDots: [TileSeverity], unreachable: Bool = false
     ) -> TileSeverity {
         if hasError || worstCI == .fail || worstRun == .failed { return .urgent }
         guard let git else { return .muted }
@@ -262,7 +284,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         if git.ahead > 0 || git.behind > 0 || agentDots.contains(.info)
             || worstRun == .running
         { return .info }
-        return .ok
+        return unreachable ? .muted : .ok
     }
 }
 

@@ -11,6 +11,8 @@ public enum DashboardSection: String, Codable, Sendable, CaseIterable {
     case prs, worktrees, repos
     /// The unified stack-ranked feed that replaces the three above.
     case ranked
+    /// The collapsed "N repos can't connect" lump at the ranked feed's foot.
+    case unreachable
 }
 
 public struct AppConfig: Codable, Sendable, Equatable {

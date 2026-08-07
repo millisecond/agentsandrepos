@@ -164,6 +164,13 @@ struct DashboardView: View {
                     }
                 }
             }
+            let unreachable = snap.unreachableTiles
+            if !unreachable.isEmpty {
+                UnreachableLumpView(
+                    tiles: unreachable,
+                    isExpanded: snap.config.isSectionExpanded(.unreachable),
+                    actions: actions)
+            }
         }
     }
 

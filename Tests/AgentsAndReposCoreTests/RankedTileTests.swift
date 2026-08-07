@@ -50,7 +50,7 @@ final class RankedTileTests: XCTestCase {
         snap.repos = [
             repo(name: "fresh-clean", activityAgo: 60),
             repo(
-                name: "broken", git: GitState(branch: "m", fetchError: "boom"),
+                name: "broken", git: GitState(branch: "m", statusError: "boom"),
                 activityAgo: 100_000),
         ]
         XCTAssertEqual(
@@ -86,6 +86,24 @@ final class RankedTileTests: XCTestCase {
         XCTAssertEqual(names.first, "host #1")
         XCTAssertEqual(names.dropFirst().first, "dirty")
         XCTAssertTrue(names.contains("host #2"))
+    }
+
+    func testQuietUnreachableReposLumpOutOfRankedList() {
+        var snap = Snapshot.empty
+        snap.repos = [
+            repo(name: "work-ok", activityAgo: 60),
+            repo(name: "cant-auth-1", git: GitState(branch: "m", fetchError: "auth")),
+            repo(name: "cant-auth-2", git: GitState(branch: "m", fetchError: "auth")),
+            repo(
+                name: "cant-auth-dirty",
+                git: GitState(branch: "m", dirty: 3, fetchError: "auth"), activityAgo: 60),
+        ]
+        let ranked = snap.rankedTiles(now: now).map(\.sortName)
+        // Quiet unreachable repos leave the list; the dirty one stays on its
+        // local merits.
+        XCTAssertEqual(Set(ranked), ["work-ok", "cant-auth-dirty"])
+        XCTAssertEqual(
+            Set(snap.unreachableTiles.map(\.name)), ["cant-auth-1", "cant-auth-2"])
     }
 
     func testRankedIdsAreNamespaced() {

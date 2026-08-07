@@ -21,10 +21,12 @@ public enum SummaryFacts {
     // MARK: - Plans
 
     public static func repoPlan(_ tile: RepoTileState) -> SummaryPlan {
-        if tile.hasError { return .fixed("Git fetch or status failing.") }
+        if tile.hasError { return .fixed("Git status failing.") }
         if tile.dirty == 0, tile.untracked == 0 {
             // Counts say it all — no need to burn model time.
             switch (tile.ahead, tile.behind) {
+            // An unreachable remote means "in sync" can't be claimed.
+            case (0, 0) where tile.unreachable: return .fixed("Can't reach remote.")
             case (0, 0): return .fixed("Clean and in sync.")
             case (let a, 0): return .fixed("Push \(a) commit\(a == 1 ? "" : "s").")
             case (0, let b): return .fixed("Pull \(b) commit\(b == 1 ? "" : "s").")
