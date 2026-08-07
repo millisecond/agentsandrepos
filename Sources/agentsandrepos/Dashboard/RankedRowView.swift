@@ -45,26 +45,28 @@ struct RowChrome: ViewModifier {
     }
 }
 
-/// Hover affordance in a row's trailing slot: says where a click lands
-/// ("↗ GitHub", "↗ Finder") before the user commits to it.
-struct ClickDestinationHint: View {
-    let symbol: String
-    let label: String
+/// A row's leading type icon that morphs on hover into the click destination
+/// (globe = browser, folder = Finder) with a tiny ↗ badge. Lives in a fixed
+/// 16pt frame, so the hint never moves or overlaps anything.
+struct LeadingDestinationIcon: View {
+    let idleSymbol: String
+    let destinationSymbol: String
+    let color: Color
+    let hovering: Bool
 
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "arrow.up.right")
-                .font(.system(size: 7, weight: .bold))
-            Image(systemName: symbol)
-                .font(.system(size: 9))
-            Text(label)
-                .font(.caption2)
-        }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 5)
-        .padding(.vertical, 2)
-        .background(Capsule().fill(.thickMaterial))
-        .padding(.trailing, 2)
+        Image(systemName: hovering ? destinationSymbol : idleSymbol)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(color)
+            .frame(width: 16)
+            .overlay(alignment: .topTrailing) {
+                if hovering {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 6, weight: .heavy))
+                        .foregroundStyle(.secondary)
+                        .offset(x: 3, y: -4)
+                }
+            }
     }
 }
 
@@ -140,10 +142,11 @@ private struct RepoRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: state.isWorktree ? "arrow.triangle.branch" : "folder")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(severity: state.severity))
-                .frame(width: 16)
+            LeadingDestinationIcon(
+                idleSymbol: state.isWorktree ? "arrow.triangle.branch" : "folder",
+                destinationSymbol: primaryURL != nil ? "globe" : "folder",
+                color: Color(severity: state.severity),
+                hovering: isHovering)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
                     Text(state.name)
@@ -172,17 +175,6 @@ private struct RepoRowView: View {
             trailing
         }
         .modifier(RowChrome(severity: state.severity))
-        // Floating (overlay = zero layout impact) so hover never shifts the
-        // row's own content around.
-        .overlay(alignment: .bottomTrailing) {
-            if isHovering {
-                ClickDestinationHint(
-                    symbol: primaryURL != nil ? "globe" : "folder",
-                    label: primaryURL != nil ? "GitHub" : "Finder")
-                    .padding(3)
-                    .allowsHitTesting(false)
-            }
-        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
         // The row's click goes where the top problem can be acted on — a
@@ -286,10 +278,11 @@ private struct PRRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "arrow.triangle.pull")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(severity: state.severity))
-                .frame(width: 16)
+            LeadingDestinationIcon(
+                idleSymbol: "arrow.triangle.pull",
+                destinationSymbol: "globe",
+                color: Color(severity: state.severity),
+                hovering: isHovering)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
                     Text(state.reference)
@@ -325,13 +318,6 @@ private struct PRRowView: View {
             trailing
         }
         .modifier(RowChrome(severity: state.severity))
-        .overlay(alignment: .bottomTrailing) {
-            if isHovering {
-                ClickDestinationHint(symbol: "globe", label: "GitHub")
-                    .padding(3)
-                    .allowsHitTesting(false)
-            }
-        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
         .onTapGesture { actions.openURL(state.url) }
