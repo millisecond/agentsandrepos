@@ -96,6 +96,9 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
 
     public let prCount: Int
     public let worstCI: PullRequest.CIStatus
+    /// URL of the first CI-failing PR on this tile's branch(es) — where the
+    /// "PR checks failing" problem links to.
+    public let failingPRURL: String?
 
     /// Recent repo-level workflow runs (deploys, dispatches). Worktree tiles
     /// never carry these — runs belong to the repo, not a checkout.
@@ -138,6 +141,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         let prs = r.prs.filter { !wtBranches.contains($0.headRefName) }
         self.prCount = prs.count
         self.worstCI = Self.worstCI(of: prs)
+        self.failingPRURL = prs.first { $0.ci == .fail }?.url
 
         self.runs = r.runs
         self.worstRun = WorkflowRun.worstState(of: r.runs)
@@ -180,6 +184,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         let prs = r.prs.filter { $0.headRefName == branchName }
         self.prCount = prs.count
         self.worstCI = Self.worstCI(of: prs)
+        self.failingPRURL = prs.first { $0.ci == .fail }?.url
 
         self.runs = []
         self.worstRun = nil
@@ -192,23 +197,35 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
             agentDots: agentDots, unreachable: unreachable)
     }
 
-    /// Plain-words statement of everything this checkout needs, worst first —
-    /// "Deploy failed · 10 modified · 2 new · 3 to push". Empty when clean
-    /// and synced, so callers can gate on "not green → say why".
-    public var needs: [String] {
-        var parts: [String] = []
-        if hasError { parts.append("git status error") }
-        for run in runs where run.state == .failed {
-            parts.append("\(run.workflowName) failed")
+    /// Actual failures needing a human, worst first — each with the URL where
+    /// it can be acted on (the failing PR, the failed run) when one exists.
+    /// Distinct from `stateInfo`: dirty files are normal work, not a problem.
+    public var problems: [RepoProblem] {
+        var list: [RepoProblem] = []
+        if hasError {
+            list.append(RepoProblem(label: "git status broken", url: nil, severity: .urgent))
         }
-        if worstCI == .fail { parts.append("PR checks failing") }
-        if agentDots.contains(.attention) { parts.append("agent waiting on input") }
+        for run in runs where run.state == .failed {
+            list.append(
+                RepoProblem(label: "\(run.workflowName) failed", url: run.url, severity: .urgent))
+        }
+        if worstCI == .fail {
+            list.append(
+                RepoProblem(label: "PR checks failing", url: failingPRURL, severity: .urgent))
+        }
+        if agentDots.contains(.attention) {
+            list.append(RepoProblem(label: "agent waiting on input", url: nil, severity: .attention))
+        }
+        return list
+    }
+
+    /// Neutral description of in-flight work — worth knowing, nothing to fix.
+    public var stateInfo: [String] {
+        var parts: [String] = []
         if dirty > 0 { parts.append("\(dirty) modified") }
         if untracked > 0 { parts.append("\(untracked) new") }
         if ahead > 0 { parts.append("\(ahead) to push") }
         if behind > 0 { parts.append("\(behind) to pull") }
-        // Last: it explains stale remote data, but must never shout over
-        // real local work.
         if unreachable { parts.append("can't connect") }
         return parts
     }
@@ -221,10 +238,6 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         unreachable && !hasError && dirty == 0 && untracked == 0 && ahead == 0
             && behind == 0 && worstCI != .fail && worstRun != .failed
             && !agentDots.contains(.attention)
-    }
-
-    public var needsLabel: String? {
-        needs.isEmpty ? nil : needs.joined(separator: " · ")
     }
 
     /// "repo ⎇ name", dropping a redundant "repo-" prefix from the worktree's
@@ -269,22 +282,40 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         return worst
     }
 
-    /// Precedence: CI/run-fail or status error → urgent > dirty/untracked or
-    /// waiting agent → attention > ahead/behind, running action, or busy agent
-    /// → info > clean → ok > no git or unreachable-remote → muted. A fetch
-    /// error alone never raises severity — an unreachable clean repo is an
-    /// unknown, not an emergency.
+    /// Precedence: CI/run-fail or status error → urgent > waiting agent →
+    /// attention > any in-flight work (dirty/untracked/ahead/behind, busy
+    /// agent, running action) → info > clean → ok > no git or
+    /// unreachable-remote → muted.
+    ///
+    /// Dirty files are deliberately NOT attention: uncommitted work is the
+    /// normal state of an active repo, and painting it orange trains the eye
+    /// to ignore orange. Attention means a human is being waited on; urgent
+    /// means something failed. A fetch error alone never raises severity.
     static func severity(
         hasError: Bool, worstCI: PullRequest.CIStatus, worstRun: WorkflowRun.State?,
         git: GitState?, agentDots: [TileSeverity], unreachable: Bool = false
     ) -> TileSeverity {
         if hasError || worstCI == .fail || worstRun == .failed { return .urgent }
         guard let git else { return .muted }
-        if !git.isClean || agentDots.contains(.attention) { return .attention }
-        if git.ahead > 0 || git.behind > 0 || agentDots.contains(.info)
-            || worstRun == .running
+        if agentDots.contains(.attention) { return .attention }
+        if !git.isClean || git.ahead > 0 || git.behind > 0
+            || agentDots.contains(.info) || worstRun == .running
         { return .info }
         return unreachable ? .muted : .ok
+    }
+}
+
+/// One actionable failure on a repo/worktree tile, with where to act on it.
+public struct RepoProblem: Sendable, Equatable {
+    public let label: String
+    /// Deep link (failing PR, failed run) when the fix lives on GitHub.
+    public let url: String?
+    public let severity: TileSeverity
+
+    public init(label: String, url: String?, severity: TileSeverity) {
+        self.label = label
+        self.url = url
+        self.severity = severity
     }
 }
 

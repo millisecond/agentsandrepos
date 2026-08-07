@@ -173,10 +173,11 @@ final class TileStateTests: XCTestCase {
         XCTAssertEqual(
             RepoTileState(
                 repo: repo(git: GitState(branch: "m", dirty: 1, fetchError: "auth"))).severity,
-            .attention)
-        // Dirty is attention.
+            .info)
+        // Dirty is info, not attention — uncommitted work is the normal
+        // state of an active repo, not something to warn about.
         XCTAssertEqual(
-            RepoTileState(repo: repo(git: GitState(branch: "m", dirty: 1))).severity, .attention)
+            RepoTileState(repo: repo(git: GitState(branch: "m", dirty: 1))).severity, .info)
         // Waiting agent raises to attention even when clean.
         XCTAssertEqual(
             RepoTileState(repo: repo(agents: [agent(.waiting(nil))])).severity, .attention)
@@ -192,23 +193,33 @@ final class TileStateTests: XCTestCase {
         XCTAssertEqual(RepoTileState(repo: repo(git: nil)).severity, .muted)
     }
 
-    func testNeedsLabelSpellsOutStateWorstFirst() {
+    func testProblemsAreFailuresOnlyWithActionURLs() {
         let tile = RepoTileState(
             repo: repo(
                 git: GitState(branch: "m", ahead: 3, dirty: 10, untracked: 2),
                 runs: [run(.failed)]))
-        XCTAssertEqual(tile.needsLabel, "Deploy failed · 10 modified · 2 new · 3 to push")
+        // Counts are state, not problems; the failed run links to itself.
+        XCTAssertEqual(tile.problems.map(\.label), ["Deploy failed"])
+        XCTAssertEqual(tile.problems[0].url, "u")
+        XCTAssertEqual(tile.stateInfo, ["10 modified", "2 new", "3 to push"])
     }
 
-    func testCleanRepoHasNoNeeds() {
-        XCTAssertNil(RepoTileState(repo: repo()).needsLabel)
-        XCTAssertNil(RepoTileState(repo: repo(runs: [run(.running)])).needsLabel)
+    func testCleanRepoHasNoProblemsOrState() {
+        XCTAssertTrue(RepoTileState(repo: repo()).problems.isEmpty)
+        XCTAssertTrue(RepoTileState(repo: repo()).stateInfo.isEmpty)
+        XCTAssertTrue(RepoTileState(repo: repo(runs: [run(.running)])).problems.isEmpty)
     }
 
-    func testWaitingAgentAndFailingPRAppearInNeeds() {
+    func testWaitingAgentAndFailingPRAreProblems() {
         let tile = RepoTileState(
             repo: repo(agents: [agent(.waiting(nil))], prs: [pr(.fail)]))
-        XCTAssertEqual(tile.needsLabel, "PR checks failing · agent waiting on input")
+        XCTAssertEqual(
+            tile.problems.map(\.label), ["PR checks failing", "agent waiting on input"])
+        // The failing-PR problem deep-links to the PR itself.
+        XCTAssertEqual(tile.problems[0].url, "u")
+        XCTAssertEqual(tile.problems[0].severity, .urgent)
+        XCTAssertEqual(tile.problems[1].severity, .attention)
+        XCTAssertNil(tile.problems[1].url)
     }
 
     func testQuietUnreachableDetection() {
@@ -221,10 +232,11 @@ final class TileStateTests: XCTestCase {
         XCTAssertFalse(RepoTileState(repo: repo()).isQuietUnreachable)
     }
 
-    func testUnreachableAppearsLastInNeeds() {
+    func testUnreachableAppearsLastInStateInfo() {
         let tile = RepoTileState(
             repo: repo(git: GitState(branch: "m", dirty: 2, fetchError: "auth")))
-        XCTAssertEqual(tile.needsLabel, "2 modified · can't connect")
+        XCTAssertEqual(tile.stateInfo, ["2 modified", "can't connect"])
+        XCTAssertTrue(tile.problems.isEmpty)
     }
 
     func testPRTilesDedupeAcrossClonesOfSameRemote() {
@@ -381,7 +393,8 @@ final class TileStateTests: XCTestCase {
         XCTAssertTrue(tiles[0].isClaudeManaged)
         XCTAssertEqual(tiles[0].path, "/wt/r-auth")
         XCTAssertEqual(tiles[0].branch, "auth")
-        XCTAssertEqual(tiles[0].severity, .attention)
+        // Dirty worktree is info, same as dirty repos — normal work.
+        XCTAssertEqual(tiles[0].severity, .info)
     }
 
     func testWorktreeBranchPRMovesToWorktreeTile() {

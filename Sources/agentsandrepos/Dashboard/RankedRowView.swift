@@ -131,7 +131,8 @@ private struct RepoRowView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                secondLine
+                problemsLine
+                stateLine
             }
             Spacer(minLength: 8)
             if !state.agentDots.isEmpty {
@@ -150,27 +151,63 @@ private struct RepoRowView: View {
         .modifier(RowChrome(severity: state.severity))
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
-        .onTapGesture { actions.openInFinder(path: state.path) }
+        // The row's click goes where the top problem can be acted on — a
+        // failing PR or run opens on GitHub. Finder is only the fallback for
+        // rows with nothing to fix (nothing actionable lives in Finder).
+        .onTapGesture {
+            if let url = state.problems.compactMap(\.url).first {
+                actions.openURL(url)
+            } else {
+                actions.openInFinder(path: state.path)
+            }
+        }
         .contextMenu { RepoContextMenuItems(state: state, actions: actions) }
+        .help(state.problems.first?.url != nil
+            ? "Click: open \(state.problems.first?.label ?? "") on GitHub"
+            : "Click: reveal in Finder")
     }
 
-    /// Anything short of green states its needs in words, severity-colored —
-    /// the badges alone are too cryptic to act on. Green rows fall back to
-    /// live workflow runs, then the LLM summary.
+    /// Failures only, each in its own color and individually clickable
+    /// (failed run → that run, failing PR → that PR).
     @ViewBuilder
-    private var secondLine: some View {
-        if let needs = state.needsLabel {
-            Text(needs)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(Color(severity: state.severity))
-                .lineLimit(1)
-        } else if !state.runs.isEmpty {
+    private var problemsLine: some View {
+        if !state.problems.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(Array(state.problems.enumerated()), id: \.offset) { i, problem in
+                    if i > 0 {
+                        Text("·").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    Text(problem.label)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color(severity: problem.severity))
+                        .lineLimit(1)
+                        .onTapGesture {
+                            if let url = problem.url { actions.openURL(url) }
+                        }
+                        .help(problem.url != nil ? "Open on GitHub" : "")
+                }
+            }
+        }
+    }
+
+    /// Normal in-flight work in calm gray — informative, not alarming. Live
+    /// workflow runs ride along; the LLM summary fills quiet rows.
+    @ViewBuilder
+    private var stateLine: some View {
+        let activeRuns = state.runs.filter { $0.state != .failed }
+        if !state.stateInfo.isEmpty || !activeRuns.isEmpty {
             HStack(spacing: 10) {
-                ForEach(state.runs) { run in
+                if !state.stateInfo.isEmpty {
+                    Text(state.stateInfo.joined(separator: " · "))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                ForEach(activeRuns) { run in
                     ActionsRunRow(run: run) { actions.openURL(run.url) }
                 }
             }
-        } else if !summary.isEmpty {
+        } else if state.problems.isEmpty, !summary.isEmpty {
             SummaryLine(display: summary, lineLimit: 1)
         }
     }
@@ -225,17 +262,16 @@ private struct PRRowView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                HStack(spacing: 4) {
-                    Text("⎇ \(state.branch) · \(state.author) ·")
-                        .foregroundStyle(.secondary)
-                    // The dominant fact ("CI failing", "changes requested")
-                    // wears the severity color so it can't be missed.
-                    Text(state.statusLabel)
-                        .fontWeight(.medium)
-                        .foregroundStyle(Color(severity: state.severity))
-                }
-                .font(.caption2)
-                .lineLimit(1)
+                Text("⎇ \(state.branch) · \(state.author)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                // The dominant fact ("CI failing", "changes requested") gets
+                // its own severity-colored line so it can't be missed.
+                Text(state.statusLabel)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color(severity: state.severity))
+                    .lineLimit(1)
             }
             Spacer(minLength: 8)
             if state.isDraft {
