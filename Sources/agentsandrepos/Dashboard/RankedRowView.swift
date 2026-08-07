@@ -45,6 +45,29 @@ struct RowChrome: ViewModifier {
     }
 }
 
+/// Hover affordance in a row's trailing slot: says where a click lands
+/// ("↗ GitHub", "↗ Finder") before the user commits to it.
+struct ClickDestinationHint: View {
+    let symbol: String
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.up.right")
+                .font(.system(size: 7, weight: .bold))
+            Image(systemName: symbol)
+                .font(.system(size: 9))
+            Text(label)
+                .font(.caption2)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(.thickMaterial))
+        .padding(.trailing, 2)
+    }
+}
+
 /// "5m ago"-style stamp for a row's trailing edge.
 private struct AgoText: View {
     let date: Date?
@@ -155,7 +178,7 @@ private struct RepoRowView: View {
         // failing PR or run opens on GitHub. Finder is only the fallback for
         // rows with nothing to fix (nothing actionable lives in Finder).
         .onTapGesture {
-            if let url = state.problems.compactMap(\.url).first {
+            if let url = primaryURL {
                 actions.openURL(url)
             } else {
                 actions.openInFinder(path: state.path)
@@ -212,10 +235,18 @@ private struct RepoRowView: View {
         }
     }
 
+    /// Where a plain row click lands: the top actionable problem, or Finder.
+    private var primaryURL: String? {
+        state.problems.compactMap(\.url).first
+    }
+
     @ViewBuilder
     private var trailing: some View {
         if isHovering {
             HStack(spacing: 2) {
+                ClickDestinationHint(
+                    symbol: primaryURL != nil ? "globe" : "folder",
+                    label: primaryURL != nil ? "GitHub" : "Finder")
                 TileCopyButton(help: "Copy \"\(RepoTileView.copyName(for: state))\"") {
                     actions.copyText(RepoTileView.copyName(for: state))
                 }
@@ -301,8 +332,11 @@ private struct PRRowView: View {
     @ViewBuilder
     private var trailing: some View {
         if isHovering {
-            TileCopyButton(help: "Copy PR number \(state.number)") {
-                actions.copyText(String(state.number))
+            HStack(spacing: 2) {
+                ClickDestinationHint(symbol: "globe", label: "GitHub")
+                TileCopyButton(help: "Copy PR number \(state.number)") {
+                    actions.copyText(String(state.number))
+                }
             }
         } else {
             AgoText(date: state.updatedAt)
