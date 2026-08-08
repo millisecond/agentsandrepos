@@ -196,47 +196,48 @@ private struct RepoRowView: View {
             : "Click: reveal in Finder")
     }
 
-    /// Failures only, each in its own color and individually clickable
-    /// (failed run → that run, failing PR → that PR).
+    /// Failures, one full line each: colored label, secondary detail (commit
+    /// subject, PR title, failing check names), relative stamp. Each line is
+    /// clickable when it has somewhere to act (that run, that PR).
     @ViewBuilder
     private var problemsLine: some View {
-        if !state.problems.isEmpty {
-            HStack(spacing: 6) {
-                ForEach(Array(state.problems.enumerated()), id: \.offset) { i, problem in
-                    if i > 0 {
-                        Text("·").font(.caption2).foregroundStyle(.tertiary)
-                    }
-                    Text(problem.label)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color(severity: problem.severity))
-                        .lineLimit(1)
-                        .onTapGesture {
-                            if let url = problem.url { actions.openURL(url) }
-                        }
-                        .help(problem.url != nil ? "Open on GitHub" : "")
-                }
-            }
-        }
-    }
-
-    /// Normal in-flight work in calm gray — informative, not alarming. Live
-    /// workflow runs ride along; the LLM summary fills quiet rows.
-    @ViewBuilder
-    private var stateLine: some View {
-        let activeRuns = state.runs.filter { $0.state != .failed }
-        if !state.stateInfo.isEmpty || !activeRuns.isEmpty {
-            HStack(spacing: 10) {
-                if !state.stateInfo.isEmpty {
-                    Text(state.stateInfo.joined(separator: " · "))
+        ForEach(Array(state.problems.enumerated()), id: \.offset) { _, problem in
+            HStack(spacing: 4) {
+                Text(problem.label)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color(severity: problem.severity))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if let detail = problem.detail {
+                    Text("— \(detail)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                ForEach(activeRuns) { run in
-                    ActionsRunRow(run: run) { actions.openURL(run.url) }
-                }
+                AgoText(date: problem.date)
             }
-        } else if state.problems.isEmpty, !summary.isEmpty {
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if let url = problem.url { actions.openURL(url) }
+            }
+            .help(problem.url != nil ? "Open on GitHub" : "")
+        }
+    }
+
+    /// One full line per live workflow run, then the calm gray counts line.
+    /// The LLM summary fills rows with nothing else to say.
+    @ViewBuilder
+    private var stateLine: some View {
+        let activeRuns = state.runs.filter { $0.state != .failed }
+        ForEach(activeRuns) { run in
+            ActionsRunRow(run: run) { actions.openURL(run.url) }
+        }
+        if !state.stateInfo.isEmpty {
+            Text(state.stateInfo.joined(separator: " · "))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        } else if state.problems.isEmpty, activeRuns.isEmpty, !summary.isEmpty {
             SummaryLine(display: summary, lineLimit: 1)
         }
     }

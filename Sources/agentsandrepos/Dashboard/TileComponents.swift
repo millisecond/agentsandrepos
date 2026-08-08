@@ -96,16 +96,16 @@ struct PRIndicator: View {
     }
 }
 
-/// One wordy line per recent repo-level workflow run (deploys, dispatches —
-/// not PR checks): "Deploy · running · 2 minutes ago". Clicking opens the
-/// run on GitHub.
+/// One full line per repo-level workflow run (deploys, dispatches — not PR
+/// checks): "⟳ Deploy running — ship pricing tiles · main · 2 min. ago".
+/// Clicking opens the run on GitHub.
 struct ActionsRunRow: View {
     let run: WorkflowRun
     let open: () -> Void
 
     private static let relative: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
+        f.unitsStyle = .abbreviated
         return f
     }()
 
@@ -114,13 +114,21 @@ struct ActionsRunRow: View {
             Image(systemName: symbol)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(Color(runState: run.state))
-            Text(run.workflowName)
+            Text("\(run.workflowName) \(run.state.rawValue)")
                 .font(.caption2.weight(.semibold))
-                .lineLimit(1)
-            Text(stateText)
-                .font(.caption2)
                 .foregroundStyle(Color(runState: run.state))
                 .lineLimit(1)
+                .layoutPriority(1)
+            Text("— \(run.title) · \(run.branch)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            if let date = run.updatedAt {
+                Text(Self.relative.localizedString(for: date, relativeTo: Date()))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: open)
@@ -134,14 +142,6 @@ struct ActionsRunRow: View {
         case .failed: return "xmark.circle.fill"
         case .other: return "minus.circle"
         }
-    }
-
-    private var stateText: String {
-        var text = "· \(run.state.rawValue)"
-        if let date = run.updatedAt {
-            text += " · \(Self.relative.localizedString(for: date, relativeTo: Date()))"
-        }
-        return text
     }
 }
 

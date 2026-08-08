@@ -147,6 +147,7 @@ struct DevRowGalleryView: View {
                 number: pr.number, title: title, url: pr.url, isDraft: pr.isDraft,
                 author: pr.author, headRefName: pr.headRefName,
                 reviewDecision: pr.reviewDecision, ci: pr.ci,
+                failingChecks: pr.failingChecks,
                 updatedAt: Date().addingTimeInterval(-1800)),
             repoName: "gallery-repo")
     }
@@ -156,10 +157,11 @@ struct DevRowGalleryView: View {
         isDraft: Bool = false
     ) -> PullRequest {
         PullRequest(
-            number: number, title: "t",
+            number: number, title: "add promo pricing to checkout",
             url: "https://github.com/dev/gallery-repo/pull/\(number)",
             isDraft: isDraft, author: "casey", headRefName: "feat/gallery-\(number)",
-            reviewDecision: reviewDecision, ci: ci)
+            reviewDecision: reviewDecision, ci: ci,
+            failingChecks: ci == .fail ? ["PR Check", "ci/lint"] : [])
     }
 
     private static func agent(

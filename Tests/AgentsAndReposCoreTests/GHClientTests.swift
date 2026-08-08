@@ -22,7 +22,9 @@ final class GHClientTests: XCTestCase {
               {"number": 14, "title": "Broken", "url": "https://github.com/o/r/pull/14",
                "isDraft": false, "author": {"login": "x"}, "headRefName": "b",
                "statusCheckRollup": [
-                 {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "FAILURE"}
+                 {"__typename": "CheckRun", "name": "PR Check", "status": "COMPLETED", "conclusion": "FAILURE"},
+                 {"__typename": "StatusContext", "context": "ci/lint", "state": "FAILURE"},
+                 {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS"}
                ]},
               {"number": 15, "title": "No CI", "url": "https://github.com/o/r/pull/15",
                "isDraft": false, "author": {"login": "x"}, "headRefName": "c",
@@ -36,6 +38,8 @@ final class GHClientTests: XCTestCase {
         XCTAssertEqual(prs[1].ci, .pending)
         XCTAssertTrue(prs[1].isDraft)
         XCTAssertEqual(prs[2].ci, .fail)
+        XCTAssertEqual(prs[2].failingChecks, ["PR Check", "ci/lint"])
+        XCTAssertEqual(prs[0].failingChecks, [])
         XCTAssertEqual(prs[3].ci, .none)
         XCTAssertEqual(prs[0].updatedAt, Date(timeIntervalSince1970: 1_785_578_400))
         XCTAssertNil(prs[3].updatedAt)

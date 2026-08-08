@@ -22,6 +22,9 @@ public struct PullRequest: Sendable, Equatable, Identifiable {
     public let headRefName: String
     public let reviewDecision: String?
     public let ci: CIStatus
+    /// Names of the checks currently failing (empty unless ci == .fail) —
+    /// "which check broke" without a trip to the browser.
+    public let failingChecks: [String]
     /// Last activity on the PR (commits, comments, reviews) per GitHub.
     public let updatedAt: Date?
 
@@ -30,7 +33,7 @@ public struct PullRequest: Sendable, Equatable, Identifiable {
     public init(
         number: Int, title: String, url: String, isDraft: Bool, author: String,
         headRefName: String, reviewDecision: String?, ci: CIStatus,
-        updatedAt: Date? = nil
+        failingChecks: [String] = [], updatedAt: Date? = nil
     ) {
         self.number = number
         self.title = title
@@ -40,6 +43,7 @@ public struct PullRequest: Sendable, Equatable, Identifiable {
         self.headRefName = headRefName
         self.reviewDecision = reviewDecision
         self.ci = ci
+        self.failingChecks = failingChecks
         self.updatedAt = updatedAt
     }
 }

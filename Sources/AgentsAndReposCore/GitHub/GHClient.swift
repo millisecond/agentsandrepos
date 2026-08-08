@@ -68,6 +68,7 @@ public enum GHClient {
                 headRefName: obj["headRefName"] as? String ?? "",
                 reviewDecision: obj["reviewDecision"] as? String,
                 ci: reduceCI(obj["statusCheckRollup"]),
+                failingChecks: failingCheckNames(obj["statusCheckRollup"]),
                 updatedAt: (obj["updatedAt"] as? String)
                     .flatMap { try? Date($0, strategy: .iso8601) })
         }
@@ -133,6 +134,24 @@ public enum GHClient {
         case "FAILURE", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED": return .failed
         default: return .other
         }
+    }
+
+    /// Names of the failing entries in a statusCheckRollup — CheckRuns carry
+    /// `name`, StatusContexts carry `context`.
+    static func failingCheckNames(_ any: Any?) -> [String] {
+        guard let items = any as? [[String: Any]] else { return [] }
+        var names: [String] = []
+        for item in items {
+            let conclusion = (item["conclusion"] as? String)?.uppercased() ?? ""
+            let state = (item["state"] as? String)?.uppercased() ?? ""
+            let failed =
+                ["FAILURE", "ERROR", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"]
+                .contains(conclusion) || ["FAILURE", "ERROR"].contains(state)
+            if failed, let name = (item["name"] as? String) ?? (item["context"] as? String) {
+                names.append(name)
+            }
+        }
+        return names
     }
 
     /// Collapses gh's statusCheckRollup (a mix of CheckRun {status, conclusion}

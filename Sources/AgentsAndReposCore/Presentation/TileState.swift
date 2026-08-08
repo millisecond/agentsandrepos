@@ -96,9 +96,9 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
 
     public let prCount: Int
     public let worstCI: PullRequest.CIStatus
-    /// URL of the first CI-failing PR on this tile's branch(es) — where the
-    /// "PR checks failing" problem links to.
-    public let failingPRURL: String?
+    /// The first CI-failing PR on this tile's branch(es) — number, title,
+    /// failing check names, and where to act on it.
+    public let failingPR: FailingPRRef?
 
     /// Recent repo-level workflow runs (deploys, dispatches). Worktree tiles
     /// never carry these — runs belong to the repo, not a checkout.
@@ -141,7 +141,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         let prs = r.prs.filter { !wtBranches.contains($0.headRefName) }
         self.prCount = prs.count
         self.worstCI = Self.worstCI(of: prs)
-        self.failingPRURL = prs.first { $0.ci == .fail }?.url
+        self.failingPR = Self.failingPR(of: prs)
 
         self.runs = r.runs
         self.worstRun = WorkflowRun.worstState(of: r.runs)
@@ -184,7 +184,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         let prs = r.prs.filter { $0.headRefName == branchName }
         self.prCount = prs.count
         self.worstCI = Self.worstCI(of: prs)
-        self.failingPRURL = prs.first { $0.ci == .fail }?.url
+        self.failingPR = Self.failingPR(of: prs)
 
         self.runs = []
         self.worstRun = nil
@@ -207,16 +207,30 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         }
         for run in runs where run.state == .failed {
             list.append(
-                RepoProblem(label: "\(run.workflowName) failed", url: run.url, severity: .urgent))
+                RepoProblem(
+                    label: "\(run.workflowName) failed",
+                    detail: "\(run.title) · \(run.branch)",
+                    url: run.url, severity: .urgent, date: run.updatedAt))
         }
-        if worstCI == .fail {
+        if let fp = failingPR {
+            let detail = fp.checks.isEmpty
+                ? fp.title
+                : "\(fp.checks.joined(separator: ", ")) — \(fp.title)"
             list.append(
-                RepoProblem(label: "PR checks failing", url: failingPRURL, severity: .urgent))
+                RepoProblem(
+                    label: "PR #\(fp.number) checks failing",
+                    detail: detail, url: fp.url, severity: .urgent))
         }
         if agentDots.contains(.attention) {
             list.append(RepoProblem(label: "agent waiting on input", url: nil, severity: .attention))
         }
         return list
+    }
+
+    static func failingPR(of prs: [PullRequest]) -> FailingPRRef? {
+        prs.first { $0.ci == .fail }.map {
+            FailingPRRef(number: $0.number, title: $0.title, url: $0.url, checks: $0.failingChecks)
+        }
     }
 
     /// Neutral description of in-flight work — worth knowing, nothing to fix.
@@ -308,14 +322,39 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
 /// One actionable failure on a repo/worktree tile, with where to act on it.
 public struct RepoProblem: Sendable, Equatable {
     public let label: String
+    /// Supporting context — the commit subject, PR title, failing check
+    /// names — rendered secondary after the label.
+    public let detail: String?
     /// Deep link (failing PR, failed run) when the fix lives on GitHub.
     public let url: String?
     public let severity: TileSeverity
+    /// When this happened, for a trailing relative stamp.
+    public let date: Date?
 
-    public init(label: String, url: String?, severity: TileSeverity) {
+    public init(
+        label: String, detail: String? = nil, url: String?, severity: TileSeverity,
+        date: Date? = nil
+    ) {
         self.label = label
+        self.detail = detail
         self.url = url
         self.severity = severity
+        self.date = date
+    }
+}
+
+/// A CI-failing PR as referenced from a repo tile's problem line.
+public struct FailingPRRef: Sendable, Equatable {
+    public let number: Int
+    public let title: String
+    public let url: String
+    public let checks: [String]
+
+    public init(number: Int, title: String, url: String, checks: [String]) {
+        self.number = number
+        self.title = title
+        self.url = url
+        self.checks = checks
     }
 }
 
@@ -400,7 +439,11 @@ public struct PRTileState: Sendable, Equatable, Identifiable {
 
     /// One line naming the dominant fact, same precedence as `severity`.
     static func statusLabel(_ pr: PullRequest) -> String {
-        if pr.ci == .fail { return "CI failing" }
+        if pr.ci == .fail {
+            return pr.failingChecks.isEmpty
+                ? "CI failing"
+                : "CI failing: \(pr.failingChecks.joined(separator: ", "))"
+        }
         if pr.reviewDecision == "CHANGES_REQUESTED" { return "changes requested" }
         if pr.isDraft { return "draft" }
         if pr.ci == .pending { return "CI running" }

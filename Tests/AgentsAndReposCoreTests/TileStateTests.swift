@@ -198,9 +198,11 @@ final class TileStateTests: XCTestCase {
             repo: repo(
                 git: GitState(branch: "m", ahead: 3, dirty: 10, untracked: 2),
                 runs: [run(.failed)]))
-        // Counts are state, not problems; the failed run links to itself.
+        // Counts are state, not problems; the failed run links to itself and
+        // carries its commit subject + branch as detail.
         XCTAssertEqual(tile.problems.map(\.label), ["Deploy failed"])
         XCTAssertEqual(tile.problems[0].url, "u")
+        XCTAssertEqual(tile.problems[0].detail, "t · main")
         XCTAssertEqual(tile.stateInfo, ["10 modified", "2 new", "3 to push"])
     }
 
@@ -214,9 +216,10 @@ final class TileStateTests: XCTestCase {
         let tile = RepoTileState(
             repo: repo(agents: [agent(.waiting(nil))], prs: [pr(.fail)]))
         XCTAssertEqual(
-            tile.problems.map(\.label), ["PR checks failing", "agent waiting on input"])
+            tile.problems.map(\.label), ["PR #1 checks failing", "agent waiting on input"])
         // The failing-PR problem deep-links to the PR itself.
         XCTAssertEqual(tile.problems[0].url, "u")
+        XCTAssertEqual(tile.problems[0].detail, "t")
         XCTAssertEqual(tile.problems[0].severity, .urgent)
         XCTAssertEqual(tile.problems[1].severity, .attention)
         XCTAssertNil(tile.problems[1].url)
