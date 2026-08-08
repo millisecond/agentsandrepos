@@ -202,6 +202,8 @@ struct RepoContextMenuItems: View {
     let actions: DashboardActions
 
     var body: some View {
+        Button("Refresh Now") { actions.fetchRepo(path: state.path) }
+        Divider()
         Button("Open in Finder") { actions.openInFinder(path: state.path) }
         Button("Open in Terminal") { actions.openInTerminal(path: state.path) }
         if let gh = state.githubRepo {
@@ -211,7 +213,6 @@ struct RepoContextMenuItems: View {
         Button("Copy Name") { actions.copyText(RepoTileView.copyName(for: state)) }
         Button("Copy Path") { actions.copyPath(state.path) }
         Divider()
-        Button("Fetch Now") { actions.fetchRepo(path: state.path) }
         Button("Ignore") { actions.ignoreRepo(path: state.path) }
         if !state.worktrees.isEmpty {
             Divider()
