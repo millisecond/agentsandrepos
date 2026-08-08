@@ -134,6 +134,19 @@ struct UnreachableLumpView: View {
     }
 }
 
+/// The PR action menu, shared between right-click and the hover ⋯ button.
+struct PRContextMenuItems: View {
+    let state: PRTileState
+    let actions: DashboardActions
+
+    var body: some View {
+        Button("Open on GitHub") { actions.openURL(state.url) }
+        Button("Copy PR Number") { actions.copyText(String(state.number)) }
+        Button("Copy URL") { actions.copyPath(state.url) }
+        Button("Copy Branch Name") { actions.copyPath(state.branch) }
+    }
+}
+
 private struct RepoRowView: View {
     let state: RepoTileState
     var summary: SummaryDisplay = SummaryDisplay()
@@ -356,18 +369,30 @@ private struct PRRowView: View {
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
         .onTapGesture { actions.openURL(state.url) }
-        .contextMenu {
-            Button("Open on GitHub") { actions.openURL(state.url) }
-            Button("Copy PR Number") { actions.copyText(String(state.number)) }
-            Button("Copy URL") { actions.copyPath(state.url) }
-            Button("Copy Branch Name") { actions.copyPath(state.branch) }
-        }
+        .contextMenu { PRContextMenuItems(state: state, actions: actions) }
         .help("\(state.reference) — \(state.title) · \(state.statusLabel)")
     }
 
     @ViewBuilder
     private var trailing: some View {
-        AgoText(date: state.updatedAt)
+        if isHovering {
+            Menu {
+                PRContextMenuItems(state: state, actions: actions)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(4)
+                    .background(Circle().fill(.thickMaterial))
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More actions")
+        } else {
+            AgoText(date: state.updatedAt)
+        }
     }
 
     private var ciColor: Color {
