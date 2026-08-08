@@ -45,28 +45,31 @@ struct RowChrome: ViewModifier {
     }
 }
 
-/// A row's leading type icon that morphs on hover into the click destination
-/// (globe = browser, folder = Finder) with a tiny ↗ badge. Lives in a fixed
-/// 16pt frame, so the hint never moves or overlaps anything.
-struct LeadingDestinationIcon: View {
-    let idleSymbol: String
-    let destinationSymbol: String
-    let color: Color
-    let hovering: Bool
+/// Hover-revealed primary-action button at a row's trailing edge: names the
+/// click destination ("↗ GitHub", "↗ Finder", "↗ Terminal") and performs it.
+/// Bigger and labeled — the affordance is the button, not an icon morph.
+struct OpenDestinationButton: View {
+    let symbol: String
+    let label: String
+    let action: () -> Void
 
     var body: some View {
-        Image(systemName: hovering ? destinationSymbol : idleSymbol)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(color)
-            .frame(width: 16)
-            .overlay(alignment: .topTrailing) {
-                if hovering {
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 6, weight: .heavy))
-                        .foregroundStyle(.secondary)
-                        .offset(x: 3, y: -4)
-                }
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 8, weight: .bold))
+                Image(systemName: symbol)
+                    .font(.system(size: 10))
+                Text(label)
+                    .font(.caption.weight(.semibold))
             }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(.thickMaterial))
+            .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -155,11 +158,10 @@ private struct RepoRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            LeadingDestinationIcon(
-                idleSymbol: state.isWorktree ? "arrow.triangle.branch" : "folder",
-                destinationSymbol: destinationSymbol,
-                color: Color(severity: state.severity),
-                hovering: isHovering)
+            Image(systemName: state.isWorktree ? "arrow.triangle.branch" : "folder")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color(severity: state.severity))
+                .frame(width: 16)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     CopyHoverText(
@@ -197,15 +199,17 @@ private struct RepoRowView: View {
         // failing PR or run opens on GitHub, a waiting agent gets its
         // terminal focused. Finder is only the fallback for rows with
         // nothing to fix (nothing actionable lives in Finder).
-        .onTapGesture {
-            switch primaryTarget {
-            case .url(let url): actions.openURL(url)
-            case .agent(let pid): actions.focusAgent(pid: pid, fallbackPath: state.path)
-            case .finder: actions.openInFinder(path: state.path)
-            }
-        }
+        .onTapGesture(perform: performPrimary)
         .contextMenu { RepoContextMenuItems(state: state, actions: actions) }
         .help(helpText)
+    }
+
+    private func performPrimary() {
+        switch primaryTarget {
+        case .url(let url): actions.openURL(url)
+        case .agent(let pid): actions.focusAgent(pid: pid, fallbackPath: state.path)
+        case .finder: actions.openInFinder(path: state.path)
+        }
     }
 
     /// Where a plain row click lands, from the worst actionable problem down.
@@ -228,6 +232,14 @@ private struct RepoRowView: View {
         case .url: return "globe"
         case .agent: return "terminal"
         case .finder: return "folder"
+        }
+    }
+
+    private var destinationLabel: String {
+        switch primaryTarget {
+        case .url: return "GitHub"
+        case .agent: return "Terminal"
+        case .finder: return "Finder"
         }
     }
 
@@ -288,7 +300,9 @@ private struct RepoRowView: View {
     @ViewBuilder
     private var trailing: some View {
         if isHovering {
-            HStack(spacing: 2) {
+            HStack(spacing: 4) {
+                OpenDestinationButton(
+                    symbol: destinationSymbol, label: destinationLabel, action: performPrimary)
                 Menu {
                     RepoContextMenuItems(state: state, actions: actions)
                 } label: {
@@ -376,20 +390,25 @@ private struct PRRowView: View {
     @ViewBuilder
     private var trailing: some View {
         if isHovering {
-            Menu {
-                PRContextMenuItems(state: state, actions: actions)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(4)
-                    .background(Circle().fill(.thickMaterial))
+            HStack(spacing: 4) {
+                OpenDestinationButton(symbol: "globe", label: "GitHub") {
+                    actions.openURL(state.url)
+                }
+                Menu {
+                    PRContextMenuItems(state: state, actions: actions)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(4)
+                        .background(Circle().fill(.thickMaterial))
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More actions")
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("More actions")
         } else {
             AgoText(date: state.updatedAt)
         }
