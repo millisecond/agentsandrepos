@@ -89,6 +89,7 @@ private struct AgoText: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
+                .help("Last activity: \(date.formatted(date: .abbreviated, time: .shortened))")
         }
     }
 }
@@ -162,6 +163,7 @@ private struct RepoRowView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color(severity: state.severity))
                 .frame(width: 16)
+                .help(state.isWorktree ? "Linked worktree" : "Repository")
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     CopyHoverText(
@@ -179,9 +181,16 @@ private struct RepoRowView: View {
                 stateLine
             }
             Spacer(minLength: 8)
+            // Hover controls appear in the spacer's empty gap, LEFT of the
+            // persistent meta — dots, counts, and timestamp never move.
+            if isHovering {
+                OpenDestinationButton(
+                    symbol: destinationSymbol, label: destinationLabel, action: performPrimary)
+                ellipsisMenu
+            }
             if !state.agentDots.isEmpty {
                 MiniDotRow(dots: state.agentDots, shape: .circle)
-                    .help("Claude agents working here")
+                    .help(agentsHelp)
             }
             PRIndicator(ci: state.worstCI, prCount: state.prCount)
             if state.hasError {
@@ -190,7 +199,7 @@ private struct RepoRowView: View {
                     .foregroundStyle(.red)
                     .help("Fetch/status error")
             }
-            trailing
+            AgoText(date: state.lastActivity)
         }
         .modifier(RowChrome(severity: state.severity))
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -243,6 +252,19 @@ private struct RepoRowView: View {
         }
     }
 
+    /// "2 Claude agents here — 1 waiting on you, 1 working"
+    private var agentsHelp: String {
+        let waiting = state.agentDots.filter { $0 == .attention }.count
+        let busy = state.agentDots.filter { $0 == .info }.count
+        let idle = state.agentDots.count - waiting - busy
+        var parts: [String] = []
+        if waiting > 0 { parts.append("\(waiting) waiting on you") }
+        if busy > 0 { parts.append("\(busy) working") }
+        if idle > 0 { parts.append("\(idle) idle") }
+        let n = state.agentDots.count
+        return "\(n) Claude agent\(n == 1 ? "" : "s") here — \(parts.joined(separator: ", "))"
+    }
+
     private var helpText: String {
         switch primaryTarget {
         case .url: return "Click: open \(state.problems.first?.label ?? "") on GitHub"
@@ -275,7 +297,11 @@ private struct RepoRowView: View {
             .onTapGesture {
                 if let url = problem.url { actions.openURL(url) }
             }
-            .help(problem.url != nil ? "Open on GitHub" : "")
+            .help(
+                problem.url != nil
+                    ? "Open on GitHub"
+                    : problem.agentPid != nil
+                        ? "Row click focuses the waiting agent's terminal" : "")
         }
     }
 
@@ -292,35 +318,30 @@ private struct RepoRowView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .help(
+                    "modified/new: uncommitted local files · to push/pull: commits vs upstream · can't connect: git fetch failing (credentials?)"
+                )
         } else if state.problems.isEmpty, activeRuns.isEmpty, !summary.isEmpty {
             SummaryLine(display: summary, lineLimit: 1)
         }
     }
 
     @ViewBuilder
-    private var trailing: some View {
-        if isHovering {
-            HStack(spacing: 4) {
-                OpenDestinationButton(
-                    symbol: destinationSymbol, label: destinationLabel, action: performPrimary)
-                Menu {
-                    RepoContextMenuItems(state: state, actions: actions)
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(4)
-                        .background(Circle().fill(.thickMaterial))
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("More actions")
-            }
-        } else {
-            AgoText(date: state.lastActivity)
+    private var ellipsisMenu: some View {
+        Menu {
+            RepoContextMenuItems(state: state, actions: actions)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(4)
+                .background(Circle().fill(.thickMaterial))
         }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("More actions")
     }
 }
 
@@ -335,6 +356,7 @@ private struct PRRowView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color(severity: state.severity))
                 .frame(width: 16)
+                .help("Pull request")
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     CopyHoverText(
@@ -367,16 +389,24 @@ private struct PRRowView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
+            if isHovering {
+                OpenDestinationButton(symbol: "globe", label: "GitHub") {
+                    actions.openURL(state.url)
+                }
+                ellipsisMenu
+            }
             if state.isDraft {
                 Text("draft")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
                     .background(Capsule().fill(.quaternary))
+                    .help("Draft — not ready for review")
             } else if state.ci != .none {
                 Circle().fill(ciColor).frame(width: 7, height: 7)
+                    .help(ciHelp)
             }
-            trailing
+            AgoText(date: state.updatedAt)
         }
         .modifier(RowChrome(severity: state.severity))
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -386,31 +416,21 @@ private struct PRRowView: View {
         .help("\(state.reference) — \(state.title) · \(state.statusLabel)")
     }
 
-    @ViewBuilder
-    private var trailing: some View {
-        if isHovering {
-            HStack(spacing: 4) {
-                OpenDestinationButton(symbol: "globe", label: "GitHub") {
-                    actions.openURL(state.url)
-                }
-                Menu {
-                    PRContextMenuItems(state: state, actions: actions)
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(4)
-                        .background(Circle().fill(.thickMaterial))
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("More actions")
-            }
-        } else {
-            AgoText(date: state.updatedAt)
+    private var ellipsisMenu: some View {
+        Menu {
+            PRContextMenuItems(state: state, actions: actions)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(4)
+                .background(Circle().fill(.thickMaterial))
         }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("More actions")
     }
 
     private var ciColor: Color {
@@ -419,6 +439,15 @@ private struct PRRowView: View {
         case .fail: return .red
         case .pending: return .yellow
         case .none: return .clear
+        }
+    }
+
+    private var ciHelp: String {
+        switch state.ci {
+        case .pass: return "CI passing"
+        case .fail: return "CI failing"
+        case .pending: return "CI running"
+        case .none: return ""
         }
     }
 }

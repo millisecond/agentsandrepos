@@ -83,6 +83,17 @@ struct PRIndicator: View {
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(.secondary)
             }
+            .help(helpText)
+        }
+    }
+
+    private var helpText: String {
+        let base = "\(prCount) open pull request\(prCount == 1 ? "" : "s")"
+        switch ci {
+        case .pass: return "\(base) — CI passing"
+        case .fail: return "\(base) — CI failing"
+        case .pending: return "\(base) — CI running"
+        case .none: return base
         }
     }
 
