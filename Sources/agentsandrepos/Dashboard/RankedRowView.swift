@@ -149,19 +149,16 @@ private struct RepoRowView: View {
                 hovering: isHovering)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(state.name)
-                        .font(.callout.weight(.semibold))
-                        .lineLimit(1)
-                    // Always in the layout (opacity-gated) so hovering never
-                    // shifts the branch text sideways.
-                    TileCopyButton(help: "Copy \"\(RepoTileView.copyName(for: state))\"") {
-                        actions.copyText(RepoTileView.copyName(for: state))
-                    }
-                    .opacity(isHovering ? 1 : 0)
-                    Text("⎇ \(state.branch)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    CopyableText(
+                        text: state.name,
+                        copyValue: RepoTileView.copyName(for: state),
+                        font: .callout.weight(.semibold),
+                        copy: actions.copyText)
+                    CopyableText(
+                        text: "⎇ \(state.branch)",
+                        copyValue: state.branch,
+                        color: .secondary,
+                        copy: actions.copyText)
                 }
                 problemsLine
                 stateLine
@@ -288,23 +285,28 @@ private struct PRRowView: View {
                 hovering: isHovering)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(state.reference)
-                        .font(.callout.weight(.semibold))
-                        .lineLimit(1)
+                    CopyableText(
+                        text: state.reference,
+                        copyValue: String(state.number),
+                        font: .callout.weight(.semibold),
+                        copy: actions.copyText)
                         .layoutPriority(1)
-                    TileCopyButton(help: "Copy PR number \(state.number)") {
-                        actions.copyText(String(state.number))
-                    }
-                    .opacity(isHovering ? 1 : 0)
                     Text(state.title)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text("⎇ \(state.branch) · \(state.author)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 0) {
+                    CopyableText(
+                        text: "⎇ \(state.branch)",
+                        copyValue: state.branch,
+                        color: .secondary,
+                        copy: actions.copyText)
+                    Text(" · \(state.author)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 // The dominant fact ("CI failing", "changes requested") gets
                 // its own severity-colored line so it can't be missed.
                 Text(state.statusLabel)

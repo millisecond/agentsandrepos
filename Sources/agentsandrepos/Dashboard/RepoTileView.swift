@@ -211,6 +211,7 @@ struct RepoContextMenuItems: View {
             Button("Open Actions") { actions.openURL("https://github.com/\(gh)/actions") }
         }
         Button("Copy Name") { actions.copyText(RepoTileView.copyName(for: state)) }
+        Button("Copy Branch Name") { actions.copyText(state.branch) }
         Button("Copy Path") { actions.copyPath(state.path) }
         Divider()
         Button("Ignore") { actions.ignoreRepo(path: state.path) }

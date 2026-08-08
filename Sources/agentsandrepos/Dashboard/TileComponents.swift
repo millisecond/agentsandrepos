@@ -274,6 +274,38 @@ struct TileIgnoreButton: View {
     }
 }
 
+/// Text that copies itself: hovering underlines it (styling only — nothing
+/// moves, no space reserved), clicking copies `copyValue` and flashes the
+/// text green as receipt. The inner tap gesture beats the row's open action.
+struct CopyableText: View {
+    let text: String
+    let copyValue: String
+    var font: Font = .caption2
+    var color: Color? = nil
+    let copy: (String) -> Void
+    @State private var hovered = false
+    @State private var copied = false
+
+    var body: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(copied ? Color.green : (color ?? Color.primary))
+            .underline(hovered && !copied)
+            .lineLimit(1)
+            .contentShape(Rectangle())
+            .onHover { hovered = $0 }
+            .onTapGesture {
+                copy(copyValue)
+                copied = true
+                Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    copied = false
+                }
+            }
+            .help("Click to copy \"\(copyValue)\"")
+    }
+}
+
 /// Copy hover button that flashes a checkmark after copying, so the click
 /// visibly did something even though nothing navigates.
 struct TileCopyButton: View {
