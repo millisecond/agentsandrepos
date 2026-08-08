@@ -331,11 +331,10 @@ private struct PRRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            LeadingDestinationIcon(
-                idleSymbol: "arrow.triangle.pull",
-                destinationSymbol: "globe",
-                color: Color(severity: state.severity),
-                hovering: isHovering)
+            Image(systemName: "arrow.triangle.pull")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color(severity: state.severity))
+                .frame(width: 16)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     CopyHoverText(
