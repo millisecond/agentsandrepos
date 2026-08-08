@@ -210,7 +210,6 @@ private struct RepoRowView: View {
         // nothing to fix (nothing actionable lives in Finder).
         .onTapGesture(perform: performPrimary)
         .contextMenu { RepoContextMenuItems(state: state, actions: actions) }
-        .help(helpText)
     }
 
     private func performPrimary() {
@@ -265,13 +264,6 @@ private struct RepoRowView: View {
         return "\(n) Claude agent\(n == 1 ? "" : "s") here — \(parts.joined(separator: ", "))"
     }
 
-    private var helpText: String {
-        switch primaryTarget {
-        case .url: return "Click: open \(state.problems.first?.label ?? "") on GitHub"
-        case .agent: return "Click: focus the waiting agent's terminal"
-        case .finder: return "Click: reveal in Finder"
-        }
-    }
 
     /// Failures, one full line each: colored label, secondary detail (commit
     /// subject, PR title, failing check names), relative stamp. Each line is
@@ -369,6 +361,7 @@ private struct PRRowView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .help(state.title)
                 }
                 HStack(spacing: 0) {
                     CopyHoverText(
@@ -413,7 +406,6 @@ private struct PRRowView: View {
         .onHover { isHovering = $0 }
         .onTapGesture { actions.openURL(state.url) }
         .contextMenu { PRContextMenuItems(state: state, actions: actions) }
-        .help("\(state.reference) — \(state.title) · \(state.statusLabel)")
     }
 
     private var ellipsisMenu: some View {
