@@ -274,10 +274,11 @@ struct TileIgnoreButton: View {
     }
 }
 
-/// Text that copies itself: hovering underlines it (styling only — nothing
-/// moves, no space reserved), clicking copies `copyValue` and flashes the
-/// text green as receipt. The inner tap gesture beats the row's open action.
-struct CopyableText: View {
+/// Text with a hover-revealed copy icon trailing it. The text itself renders
+/// (and clicks) like any other text — no link styling, the row's own click
+/// stays in charge — and only the little icon copies. The icon appearing
+/// shifts its neighbors slightly; that's confined to the hovered text.
+struct CopyHoverText: View {
     let text: String
     let copyValue: String
     var font: Font = .caption2
@@ -287,22 +288,29 @@ struct CopyableText: View {
     @State private var copied = false
 
     var body: some View {
-        Text(text)
-            .font(font)
-            .foregroundStyle(copied ? Color.green : (color ?? Color.primary))
-            .underline(hovered && !copied)
-            .lineLimit(1)
-            .contentShape(Rectangle())
-            .onHover { hovered = $0 }
-            .onTapGesture {
-                copy(copyValue)
-                copied = true
-                Task {
-                    try? await Task.sleep(for: .seconds(1))
-                    copied = false
-                }
+        HStack(spacing: 3) {
+            Text(text)
+                .font(font)
+                .foregroundStyle(color ?? Color.primary)
+                .lineLimit(1)
+            if hovered || copied {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(copied ? Color.green : Color.secondary)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        copy(copyValue)
+                        copied = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(1))
+                            copied = false
+                        }
+                    }
+                    .help("Copy \"\(copyValue)\"")
             }
-            .help("Click to copy \"\(copyValue)\"")
+        }
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
     }
 }
 

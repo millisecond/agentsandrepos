@@ -149,12 +149,12 @@ private struct RepoRowView: View {
                 hovering: isHovering)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    CopyableText(
+                    CopyHoverText(
                         text: state.name,
                         copyValue: RepoTileView.copyName(for: state),
                         font: .callout.weight(.semibold),
                         copy: actions.copyText)
-                    CopyableText(
+                    CopyHoverText(
                         text: "⎇ \(state.branch)",
                         copyValue: state.branch,
                         color: .secondary,
@@ -285,7 +285,7 @@ private struct PRRowView: View {
                 hovering: isHovering)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    CopyableText(
+                    CopyHoverText(
                         text: state.reference,
                         copyValue: String(state.number),
                         font: .callout.weight(.semibold),
@@ -297,7 +297,7 @@ private struct PRRowView: View {
                         .lineLimit(1)
                 }
                 HStack(spacing: 0) {
-                    CopyableText(
+                    CopyHoverText(
                         text: "⎇ \(state.branch)",
                         copyValue: state.branch,
                         color: .secondary,
