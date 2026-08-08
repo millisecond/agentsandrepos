@@ -26,7 +26,7 @@ struct RowChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, 9)
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -147,11 +147,17 @@ private struct RepoRowView: View {
                 destinationSymbol: primaryURL != nil ? "globe" : "folder",
                 color: Color(severity: state.severity),
                 hovering: isHovering)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(state.name)
                         .font(.callout.weight(.semibold))
                         .lineLimit(1)
+                    // Always in the layout (opacity-gated) so hovering never
+                    // shifts the branch text sideways.
+                    TileCopyButton(help: "Copy \"\(RepoTileView.copyName(for: state))\"") {
+                        actions.copyText(RepoTileView.copyName(for: state))
+                    }
+                    .opacity(isHovering ? 1 : 0)
                     Text("⎇ \(state.branch)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -247,9 +253,6 @@ private struct RepoRowView: View {
     private var trailing: some View {
         if isHovering {
             HStack(spacing: 2) {
-                TileCopyButton(help: "Copy \"\(RepoTileView.copyName(for: state))\"") {
-                    actions.copyText(RepoTileView.copyName(for: state))
-                }
                 Menu {
                     RepoContextMenuItems(state: state, actions: actions)
                 } label: {
@@ -283,12 +286,16 @@ private struct PRRowView: View {
                 destinationSymbol: "globe",
                 color: Color(severity: state.severity),
                 hovering: isHovering)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(state.reference)
                         .font(.callout.weight(.semibold))
                         .lineLimit(1)
                         .layoutPriority(1)
+                    TileCopyButton(help: "Copy PR number \(state.number)") {
+                        actions.copyText(String(state.number))
+                    }
+                    .opacity(isHovering ? 1 : 0)
                     Text(state.title)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -332,13 +339,7 @@ private struct PRRowView: View {
 
     @ViewBuilder
     private var trailing: some View {
-        if isHovering {
-            TileCopyButton(help: "Copy PR number \(state.number)") {
-                actions.copyText(String(state.number))
-            }
-        } else {
-            AgoText(date: state.updatedAt)
-        }
+        AgoText(date: state.updatedAt)
     }
 
     private var ciColor: Color {
