@@ -144,7 +144,7 @@ private struct RepoRowView: View {
         HStack(spacing: 8) {
             LeadingDestinationIcon(
                 idleSymbol: state.isWorktree ? "arrow.triangle.branch" : "folder",
-                destinationSymbol: primaryURL != nil ? "globe" : "folder",
+                destinationSymbol: destinationSymbol,
                 color: Color(severity: state.severity),
                 hovering: isHovering)
             VStack(alignment: .leading, spacing: 3) {
@@ -181,19 +181,49 @@ private struct RepoRowView: View {
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
         // The row's click goes where the top problem can be acted on — a
-        // failing PR or run opens on GitHub. Finder is only the fallback for
-        // rows with nothing to fix (nothing actionable lives in Finder).
+        // failing PR or run opens on GitHub, a waiting agent gets its
+        // terminal focused. Finder is only the fallback for rows with
+        // nothing to fix (nothing actionable lives in Finder).
         .onTapGesture {
-            if let url = primaryURL {
-                actions.openURL(url)
-            } else {
-                actions.openInFinder(path: state.path)
+            switch primaryTarget {
+            case .url(let url): actions.openURL(url)
+            case .agent(let pid): actions.focusAgent(pid: pid, fallbackPath: state.path)
+            case .finder: actions.openInFinder(path: state.path)
             }
         }
         .contextMenu { RepoContextMenuItems(state: state, actions: actions) }
-        .help(state.problems.first?.url != nil
-            ? "Click: open \(state.problems.first?.label ?? "") on GitHub"
-            : "Click: reveal in Finder")
+        .help(helpText)
+    }
+
+    /// Where a plain row click lands, from the worst actionable problem down.
+    private enum PrimaryTarget {
+        case url(String)
+        case agent(Int32)
+        case finder
+    }
+
+    private var primaryTarget: PrimaryTarget {
+        for problem in state.problems {
+            if let url = problem.url { return .url(url) }
+            if let pid = problem.agentPid { return .agent(pid) }
+        }
+        return .finder
+    }
+
+    private var destinationSymbol: String {
+        switch primaryTarget {
+        case .url: return "globe"
+        case .agent: return "terminal"
+        case .finder: return "folder"
+        }
+    }
+
+    private var helpText: String {
+        switch primaryTarget {
+        case .url: return "Click: open \(state.problems.first?.label ?? "") on GitHub"
+        case .agent: return "Click: focus the waiting agent's terminal"
+        case .finder: return "Click: reveal in Finder"
+        }
     }
 
     /// Failures, one full line each: colored label, secondary detail (commit
@@ -240,11 +270,6 @@ private struct RepoRowView: View {
         } else if state.problems.isEmpty, activeRuns.isEmpty, !summary.isEmpty {
             SummaryLine(display: summary, lineLimit: 1)
         }
-    }
-
-    /// Where a plain row click lands: the top actionable problem, or Finder.
-    private var primaryURL: String? {
-        state.problems.compactMap(\.url).first
     }
 
     @ViewBuilder

@@ -108,6 +108,8 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     /// One severity per agent working directly in this tile's checkout.
     /// Worktree agents dot their own worktree tile, not the parent repo's.
     public let agentDots: [TileSeverity]
+    /// First waiting agent's pid, so the row click can focus its terminal.
+    public let waitingAgentPid: Int32?
     /// Full worktree states, for the parent repo's context menu.
     public let worktrees: [WorktreeTileState]
 
@@ -147,6 +149,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.worstRun = WorkflowRun.worstState(of: r.runs)
 
         self.agentDots = Self.dots(of: r.agents)
+        self.waitingAgentPid = Self.waitingPid(of: r.agents)
         self.worktrees = r.worktrees.map {
             WorktreeTileState(worktree: $0, repoName: r.repo.name)
         }
@@ -190,6 +193,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.worstRun = nil
 
         self.agentDots = Self.dots(of: wt.agents)
+        self.waitingAgentPid = Self.waitingPid(of: wt.agents)
         self.worktrees = []
 
         self.severity = Self.severity(
@@ -222,7 +226,10 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
                     detail: detail, url: fp.url, severity: .urgent))
         }
         if agentDots.contains(.attention) {
-            list.append(RepoProblem(label: "agent waiting on input", url: nil, severity: .attention))
+            list.append(
+                RepoProblem(
+                    label: "agent waiting on input", url: nil,
+                    agentPid: waitingAgentPid, severity: .attention))
         }
         return list
     }
@@ -262,6 +269,10 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
             short = String(short.dropFirst(repoName.count + 1))
         }
         return "\(repoName) ⎇ \(short)"
+    }
+
+    static func waitingPid(of agents: [AgentSession]) -> Int32? {
+        agents.first { if case .waiting = $0.status { return true } else { return false } }?.pid
     }
 
     static func dots(of agents: [AgentSession]) -> [TileSeverity] {
@@ -327,17 +338,21 @@ public struct RepoProblem: Sendable, Equatable {
     public let detail: String?
     /// Deep link (failing PR, failed run) when the fix lives on GitHub.
     public let url: String?
+    /// The waiting agent's pid when the fix is answering an agent — the UI
+    /// focuses its terminal instead of opening a URL.
+    public let agentPid: Int32?
     public let severity: TileSeverity
     /// When this happened, for a trailing relative stamp.
     public let date: Date?
 
     public init(
-        label: String, detail: String? = nil, url: String?, severity: TileSeverity,
-        date: Date? = nil
+        label: String, detail: String? = nil, url: String?, agentPid: Int32? = nil,
+        severity: TileSeverity, date: Date? = nil
     ) {
         self.label = label
         self.detail = detail
         self.url = url
+        self.agentPid = agentPid
         self.severity = severity
         self.date = date
     }

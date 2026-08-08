@@ -15,11 +15,28 @@ enum DevMode {
 
 struct DevRowGalleryView: View {
     let actions: DashboardActions
+    /// Survives relaunches so the gallery stays out of the way once hidden.
+    @AppStorage("devRowGalleryExpanded") private var expanded = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Dev · Row Gallery")
-            VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionHeader(title: "Dev · Row Gallery")
+                Spacer()
+                Button(expanded ? "Hide" : "Show") { expanded.toggle() }
+                    .buttonStyle(.borderless)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if expanded {
+                galleryRows
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var galleryRows: some View {
+        VStack(alignment: .leading, spacing: 5) {
                 ForEach(Self.fixtures, id: \.label) { fixture in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(fixture.label)
@@ -33,7 +50,6 @@ struct DevRowGalleryView: View {
                     .foregroundStyle(.tertiary)
                 UnreachableLumpView(
                     tiles: Self.unreachableFixtures, isExpanded: false, actions: actions)
-            }
         }
     }
 
