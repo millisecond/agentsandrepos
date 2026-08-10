@@ -5,8 +5,10 @@ public struct AgentSession: Sendable, Equatable, Identifiable {
     public enum Status: Sendable, Equatable {
         case idle
         case busy
-        /// The human is at a shell prompt inside the session — not the agent
-        /// working, but not asleep either. An intermediate state.
+        /// The session is parked on a running shell command (long-running or
+        /// backgrounded Bash) — the agent isn't reasoning, but work is in
+        /// flight and it will resume when the command finishes. An
+        /// intermediate state between busy and idle.
         case shell
         case waiting(String?)
         case unknown(String)
@@ -26,8 +28,10 @@ public struct AgentSession: Sendable, Equatable, Identifiable {
             return false
         }
 
-        /// Busy or waiting — an agent actively holding the repo.
-        public var isActive: Bool { isBusy || isWaiting }
+        /// Busy, waiting, or parked on a shell command — an agent actively
+        /// holding the repo. Gates auto-fast-forward, and stale-status
+        /// demotion (an hour-old "shell" is a dead file, not a live command).
+        public var isActive: Bool { isBusy || isWaiting || isShell }
 
         public var label: String {
             switch self {
