@@ -59,6 +59,14 @@ public struct RepoOverview: Sendable, Equatable, Identifiable {
         if worktrees.contains(where: { $0.git?.needsAttention == true }) { return true }
         return false
     }
+
+    /// Something is broken (fetch/status failed) rather than merely dirty —
+    /// drives the status item's error state alongside failing PR checks.
+    public var hasError: Bool {
+        if git?.hasError == true { return true }
+        if prs.contains(where: { $0.ci == .fail }) { return true }
+        return worktrees.contains { $0.git?.hasError == true }
+    }
 }
 
 public enum GHAvailability: Sendable, Equatable {

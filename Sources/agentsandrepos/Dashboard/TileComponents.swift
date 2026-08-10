@@ -220,42 +220,49 @@ extension EnvironmentValues {
     }
 }
 
-/// Continuously rotating gear for busy agents — "working", not a settings
-/// button and not a refresh arrow. Renders static while the dashboard is
-/// hidden; the animated leaf is only in the hierarchy while live, so closing
-/// the popover tears the animation down and reopening starts it fresh.
-struct SpinningGear: View {
+/// One of the AgentIcon template images, tinted — the tiles' counterpart of
+/// the menu-bar glyph so agent iconography matches everywhere.
+struct AgentIconImage: View {
+    let image: NSImage
     let color: Color
-    var size: CGFloat = 17
+
+    var body: some View {
+        Image(nsImage: image)
+            .renderingMode(.template)
+            .foregroundStyle(color)
+    }
+}
+
+/// Pulsing agent glyph for busy agents — "working". Renders static while the
+/// dashboard is hidden; the animated leaf is only in the hierarchy while
+/// live, so closing the popover tears the animation down and reopening
+/// starts it fresh.
+struct BusyAgentIcon: View {
+    let color: Color
     @Environment(\.dashboardLive) private var live
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if live, !reduceMotion {
-            AnimatedGear(color: color, size: size)
+            PulsingAgentIcon(color: color)
         } else {
-            Image(systemName: "gearshape.fill")
-                .font(.system(size: size, weight: .medium))
-                .foregroundStyle(color)
+            AgentIconImage(image: AgentIcon.busy, color: color)
         }
     }
 }
 
 /// State lives in this leaf so snapshot re-renders don't restart the
-/// rotation phase.
-private struct AnimatedGear: View {
+/// pulse phase.
+private struct PulsingAgentIcon: View {
     let color: Color
-    let size: CGFloat
-    @State private var spinning = false
+    @State private var dimmed = false
 
     var body: some View {
-        Image(systemName: "gearshape.fill")
-            .font(.system(size: size, weight: .medium))
-            .foregroundStyle(color)
-            .rotationEffect(.degrees(spinning ? 360 : 0))
+        AgentIconImage(image: AgentIcon.busy, color: color)
+            .opacity(dimmed ? 0.45 : 1)
             .onAppear {
-                withAnimation(.linear(duration: 2.5).repeatForever(autoreverses: false)) {
-                    spinning = true
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                    dimmed = true
                 }
             }
     }

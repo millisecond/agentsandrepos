@@ -19,7 +19,9 @@ struct AgentTileView: View {
                 // ignore button, and a stable top row means nothing shifts
                 // when the agent changes phase.
                 if state.phase == .busy {
-                    SpinningGear(color: tint)
+                    BusyAgentIcon(color: tint)
+                } else if let agentImage {
+                    AgentIconImage(image: agentImage, color: tint)
                 } else {
                     Image(systemName: symbolName)
                         .font(.system(size: 17, weight: .medium))
@@ -107,13 +109,23 @@ struct AgentTileView: View {
         tileTint ?? Color(severity: state.severity)
     }
 
+    /// The shared robot glyphs where a variant exists, so the tiles match the
+    /// menu bar; shell/unknown keep their own SF symbols (distinct states the
+    /// robot family doesn't cover).
+    private var agentImage: NSImage? {
+        switch state.phase {
+        case .busy: return AgentIcon.busy
+        case .waiting: return AgentIcon.waiting
+        case .idle: return AgentIcon.idle
+        case .shell, .unknown: return nil
+        }
+    }
+
     private var symbolName: String {
         switch state.phase {
-        case .busy: return "gearshape.fill"
         case .shell: return "terminal.fill"
-        case .waiting: return "pause.circle.fill"
-        case .idle: return "moon.zzz.fill"
         case .unknown: return "questionmark.circle.fill"
+        case .busy, .waiting, .idle: return ""
         }
     }
 }

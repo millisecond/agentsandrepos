@@ -59,6 +59,8 @@ public struct GitState: Sendable, Equatable {
         !isClean || ahead > 0 || behind > 0 || fetchError != nil || statusError != nil
     }
 
+    public var hasError: Bool { fetchError != nil || statusError != nil }
+
     /// Short human summary like "main ●3 +1 ↑2↓1".
     public var summary: String {
         var parts: [String] = []

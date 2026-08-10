@@ -10,19 +10,13 @@ final class StatusItemController: NSObject {
     /// which needs the controller-independent wiring).
     var popoverController: DashboardPopoverController?
 
-    /// Shown only when there is nothing to report; otherwise the compact
-    /// glyph+count title replaces it so the item stays one cell wide.
-    private static let idleImage = NSImage(
-        systemSymbolName: "square.stack.3d.up",
-        accessibilityDescription: AppInfo.displayName)
-
     init(delegate: any MenuActionDelegate) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         self.delegate = delegate
 
         if let button = statusItem.button {
-            button.image = Self.idleImage
+            button.image = AgentIcon.idle
             button.imagePosition = .imageLeading
             button.target = self
             button.action = #selector(statusButtonClicked(_:))
@@ -30,28 +24,45 @@ final class StatusItemController: NSObject {
         }
     }
 
+    /// Debug override for eyeballing status-item states without manufacturing
+    /// the real condition: launch with AAR_FORCE_STATE=waiting|busy|error|idle.
+    private let forcedState = ProcessInfo.processInfo.environment["AAR_FORCE_STATE"]
+
     func update(snapshot: Snapshot) {
         self.snapshot = snapshot
         guard let button = statusItem.button else { return }
         let agents = snapshot.visibleAgents
-        let waiting = agents.filter { $0.status.isWaiting }.count
-        let busy = agents.filter { $0.status.isBusy }.count
-        let attention = snapshot.visibleRepos.filter(\.needsAttention).count
+        var waiting = agents.filter { $0.status.isWaiting }.count
+        var busy = agents.filter { $0.status.isBusy }.count
+        var errors = snapshot.visibleRepos.filter(\.hasError).count
+        if let forcedState {
+            (waiting, busy, errors) = (0, 0, 0)
+            switch forcedState {
+            case "waiting": waiting = 3
+            case "busy": busy = 3
+            case "error": errors = 3
+            default: break
+            }
+        }
 
+        let image: NSImage
         let title: String
         if waiting > 0 {
-            title = "⏸\(waiting)"
+            image = AgentIcon.waiting
+            title = " \(waiting)"
         } else if busy > 0 {
-            title = "⚙\(busy)"
-        } else if attention > 0 {
-            title = "•\(attention)"
+            image = AgentIcon.busy
+            title = " \(busy)"
+        } else if errors > 0 {
+            image = AgentIcon.error
+            title = " \(errors)"
         } else {
+            image = AgentIcon.idle
             title = ""
         }
         // Setting an unchanged title/image still dirties the status-bar
         // window's layout; skip both so per-tick publishes don't redraw the
         // menu bar.
-        let image = title.isEmpty ? Self.idleImage : nil
         if button.image !== image { button.image = image }
         if button.title != title { button.title = title }
     }
