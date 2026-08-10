@@ -29,6 +29,9 @@ struct RepoTileView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if let merge = state.mergeState {
+                        MergeStateBadge(state: merge)
+                    }
                 }
                 if !state.runs.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
@@ -182,6 +185,7 @@ struct RepoTileView: View {
         if state.isWorktree {
             parts.append(state.isClaudeManaged ? "(claude worktree)" : "(worktree)")
         }
+        if let merge = state.mergeState { parts.append("(\(merge.label))") }
         if state.dirty > 0 { parts.append("\(state.dirty) modified") }
         if state.untracked > 0 { parts.append("\(state.untracked) new") }
         if state.ahead > 0 { parts.append("\(state.ahead) to push") }

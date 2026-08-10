@@ -3,8 +3,10 @@ import XCTest
 @testable import AgentsAndReposCore
 
 /// `RepoOverview.hasError` drives the status item's dead-eyes error state:
-/// broken plumbing (fetch/status failures) and failing PR checks count;
-/// ordinary dirt (uncommitted/ahead/behind) does not.
+/// broken plumbing (git status failures) and failing PR checks count;
+/// ordinary dirt (uncommitted/ahead/behind) does not, and neither do fetch
+/// errors — a wrong-account machine has dozens of unreachable repos that the
+/// dashboard lumps quietly, and a permanent error badge would undo that.
 final class RepoErrorStateTests: XCTestCase {
 
     private func overview(
@@ -27,8 +29,8 @@ final class RepoErrorStateTests: XCTestCase {
         XCTAssertFalse(r.hasError)
     }
 
-    func testFetchAndStatusErrorsCount() {
-        XCTAssertTrue(overview(git: GitState(fetchError: "boom")).hasError)
+    func testStatusErrorsCountButFetchErrorsDoNot() {
+        XCTAssertFalse(overview(git: GitState(fetchError: "boom")).hasError)
         XCTAssertTrue(overview(git: GitState(statusError: "boom")).hasError)
     }
 
@@ -40,7 +42,7 @@ final class RepoErrorStateTests: XCTestCase {
     func testWorktreeErrorBubblesUp() {
         let wt = WorktreeOverview(
             worktree: Worktree(path: "/tmp/r-wt", branch: "x", detached: false, isClaudeManaged: false),
-            git: GitState(fetchError: "boom"), agents: [])
+            git: GitState(statusError: "boom"), agents: [])
         XCTAssertTrue(overview(worktrees: [wt]).hasError)
     }
 }

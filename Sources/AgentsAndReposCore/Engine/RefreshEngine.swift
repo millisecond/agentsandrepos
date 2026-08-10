@@ -45,6 +45,13 @@ public actor RefreshEngine {
     /// `git log` spawn on every status poll.
     private var commitDateCache: [String: (oid: String, date: Date?)] = [:]
 
+    /// Branch-vs-main ancestry keyed by path, valid while (branch head,
+    /// local main, remote main) all stand still — the `merge-base` spawns
+    /// happen only when one of those oids moves. The oids themselves come
+    /// from RefReader (plain file reads), so checking staleness is free.
+    private var mergeStateCache: [String: (key: String, state: BranchMergeState?)] = [:]
+    private var refReader = RefReader()
+
     private var loops: [Task<Void, Never>] = []
     private var started = false
 
@@ -331,6 +338,8 @@ public actor RefreshEngine {
         worktreesByRepo = worktreesByRepo.filter { valid.contains($0.key) }
         prs = prs.filter { valid.contains($0.key) }
         runs = runs.filter { valid.contains($0.key) }
+        let statusPaths = valid.union(worktreesByRepo.values.flatMap { $0.map(\.path) })
+        mergeStateCache = mergeStateCache.filter { statusPaths.contains($0.key) }
         rebuildWatcherIfNeeded()
     }
 
@@ -481,8 +490,40 @@ public actor RefreshEngine {
                 repoPath: path,
                 commitDate: await commitDate(path, headOid: s.headOid),
                 changedPaths: s.changedPaths)
+            s.mergeState = await mergeState(path, status: s)
         }
         gitStates[path] = s
+    }
+
+    /// Where the checkout's branch stands vs main — nil on main itself,
+    /// detached HEADs, or when no main branch can be found.
+    private func mergeState(_ path: String, status s: GitState) async -> BranchMergeState? {
+        guard !s.detached, let branch = s.branch, let head = s.headOid else { return nil }
+        let refs = refReader.mainRefs(repoPath: owningRepoPath(of: path))
+        guard let mainName = refs.branchName, branch != mainName else { return nil }
+
+        let key = "\(head)|\(refs.localOid ?? "-")|\(refs.remoteOid ?? "-")"
+        if let cached = mergeStateCache[path], cached.key == key { return cached.state }
+
+        var state: BranchMergeState?
+        if let remote = refs.remoteOid, await GitClient.isAncestor(path, head, of: remote) == true {
+            state = .mergedRemote
+        } else if let local = refs.localOid, await GitClient.isAncestor(path, head, of: local) == true {
+            state = .mergedLocal
+        } else if refs.localOid != nil || refs.remoteOid != nil {
+            state = .unmerged
+        }
+        mergeStateCache[path] = (key, state)
+        return state
+    }
+
+    /// Linked worktrees resolve refs through their parent repo; everything
+    /// else is its own repo.
+    private func owningRepoPath(of path: String) -> String {
+        if let owner = worktreesByRepo.first(where: { $0.value.contains { $0.path == path } }) {
+            return owner.key
+        }
+        return path
     }
 
     private func commitDate(_ path: String, headOid: String?) async -> Date? {

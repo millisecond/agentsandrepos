@@ -66,6 +66,7 @@ struct AgentTileView: View {
                 TileIgnoreButton(help: "Ignore this agent") {
                     actions.ignoreAgent(sessionId: state.id)
                 }
+                .padding(4)
             }
         }
         .onHover { isHovering = $0 }

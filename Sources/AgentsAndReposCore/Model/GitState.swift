@@ -22,6 +22,9 @@ public struct GitState: Sendable, Equatable {
     public var lastFetch: Date?
     public var fetchError: String?
     public var statusError: String?
+    /// Set by the engine for non-main branches (ancestry vs local/remote
+    /// main); nil on main, detached, or when no main exists.
+    public var mergeState: BranchMergeState?
 
     public init(
         branch: String? = nil,
@@ -36,7 +39,8 @@ public struct GitState: Sendable, Equatable {
         lastActivity: Date? = nil,
         lastFetch: Date? = nil,
         fetchError: String? = nil,
-        statusError: String? = nil
+        statusError: String? = nil,
+        mergeState: BranchMergeState? = nil
     ) {
         self.branch = branch
         self.headOid = headOid
@@ -51,6 +55,7 @@ public struct GitState: Sendable, Equatable {
         self.lastFetch = lastFetch
         self.fetchError = fetchError
         self.statusError = statusError
+        self.mergeState = mergeState
     }
 
     public var isClean: Bool { dirty == 0 && untracked == 0 }
@@ -78,6 +83,7 @@ public struct GitState: Sendable, Equatable {
             parts.append(arrows)
         }
         if fetchError != nil || statusError != nil { parts.append("⚠︎") }
+        if let mergeState { parts.append("·\(mergeState.compactLabel)") }
         return parts.joined(separator: " ")
     }
 }

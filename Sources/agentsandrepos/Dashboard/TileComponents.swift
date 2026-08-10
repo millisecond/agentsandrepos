@@ -69,6 +69,31 @@ struct CountBadge: View {
     }
 }
 
+/// Tiny pill next to a branch name: where the branch stands vs main.
+/// Green = merged (safe to clean up); unmerged stays muted — every feature
+/// branch in progress is unmerged, so it's a fact, not an alert.
+struct MergeStateBadge: View {
+    let state: BranchMergeState
+
+    var body: some View {
+        Text(state.label)
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 0.5)
+            .background(Capsule().fill(color.opacity(0.14)))
+            .help(state.help)
+    }
+
+    private var color: Color {
+        switch state {
+        case .mergedRemote: return .green
+        case .mergedLocal: return .mint
+        case .unmerged: return .secondary
+        }
+    }
+}
+
 /// Corner indicator on repo tiles: CI dot (worst status) + PR count.
 struct PRIndicator: View {
     let ci: PullRequest.CIStatus
@@ -106,7 +131,9 @@ struct PRIndicator: View {
         switch ci {
         case .pass: return .green
         case .fail: return .red
-        case .pending: return .yellow
+        // Teal = "in flight, will resolve" — same concept as an agent's
+        // shell state, so they share a color.
+        case .pending: return .teal
         case .none: return .clear
         }
     }
@@ -164,7 +191,8 @@ struct ActionsRunRow: View {
 extension Color {
     init(runState: WorkflowRun.State) {
         switch runState {
-        case .running: self = .yellow
+        // Teal for in-flight, matching CI-pending and agent shell state.
+        case .running: self = .teal
         case .passed: self = .green
         case .failed: self = .red
         case .other: self = .secondary

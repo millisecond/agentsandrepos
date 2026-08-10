@@ -69,6 +69,22 @@ public enum GitClient {
         return Date(timeIntervalSince1970: epoch)
     }
 
+    /// Is `ancestor` contained in `descendant`'s history? Nil when git can't
+    /// answer (bad oid, timeout) — distinct from a definite no.
+    public static func isAncestor(
+        _ repoPath: String, _ ancestor: String, of descendant: String
+    ) async -> Bool? {
+        let r = await ProcessRunner.run(
+            binary, ["-C", repoPath, "merge-base", "--is-ancestor", ancestor, descendant],
+            environment: environment(), timeout: 10)
+        if r.timedOut { return nil }
+        switch r.exitCode {
+        case 0: return true
+        case 1: return false
+        default: return nil
+        }
+    }
+
     public static func worktrees(_ repoPath: String) async -> [Worktree] {
         let r = await ProcessRunner.run(
             binary, ["-C", repoPath, "worktree", "list", "--porcelain"],

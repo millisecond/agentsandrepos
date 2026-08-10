@@ -74,16 +74,18 @@ struct DevRowGalleryView: View {
                 name: "broken-repo",
                 git: GitState(branch: "main", statusError: "index locked")))),
         Fixture(
-            label: "repo · attention · agent waiting",
+            label: "repo · attention · agent waiting · unmerged branch",
             tile: .repo(repoTile(
                 name: "waiting-repo",
-                git: GitState(branch: "feat/checkout", dirty: 4),
+                git: GitState(branch: "feat/checkout", dirty: 4, mergeState: .unmerged),
                 agents: [agent(.waiting(nil), name: "fix-tests")]))),
         Fixture(
-            label: "repo · info · local work + busy agent + running deploy",
+            label: "repo · info · local work + busy agent + running deploy · merged locally",
             tile: .repo(repoTile(
                 name: "active-repo",
-                git: GitState(branch: "feat/pricing", ahead: 2, dirty: 7, untracked: 1),
+                git: GitState(
+                    branch: "feat/pricing", ahead: 2, dirty: 7, untracked: 1,
+                    mergeState: .mergedLocal),
                 agents: [agent(.busy, name: "refactor")],
                 runs: [run(.running, workflow: "Deploy")]))),
         Fixture(
@@ -98,7 +100,7 @@ struct DevRowGalleryView: View {
                 name: "offline-repo",
                 git: GitState(branch: "main", fetchError: "auth")))),
         Fixture(
-            label: "worktree · info · new files",
+            label: "worktree · info · new files · merged upstream",
             tile: .repo(worktreeTile())),
         Fixture(
             label: "PR · urgent · CI failing",
@@ -148,7 +150,9 @@ struct DevRowGalleryView: View {
             worktree: Worktree(
                 path: "/dev/fixtures/gallery-repo-feature", branch: "feature",
                 detached: false, isClaudeManaged: true),
-            git: GitState(branch: "feature", untracked: 2, lastActivity: Date().addingTimeInterval(-7200)),
+            git: GitState(
+                branch: "feature", untracked: 2,
+                lastActivity: Date().addingTimeInterval(-7200), mergeState: .mergedRemote),
             agents: [])
         let parent = RepoOverview(
             repo: Repo(path: "/dev/fixtures/gallery-repo", name: "gallery-repo", root: "/dev/fixtures"),

@@ -176,6 +176,9 @@ private struct RepoRowView: View {
                         copyValue: state.branch,
                         color: .secondary,
                         copy: actions.copyText)
+                    if let merge = state.mergeState {
+                        MergeStateBadge(state: merge)
+                    }
                 }
                 problemsLine
                 stateLine
@@ -429,7 +432,8 @@ private struct PRRowView: View {
         switch state.ci {
         case .pass: return .green
         case .fail: return .red
-        case .pending: return .yellow
+        // Teal = in flight, matching runs and agent shell state.
+        case .pending: return .teal
         case .none: return .clear
         }
     }

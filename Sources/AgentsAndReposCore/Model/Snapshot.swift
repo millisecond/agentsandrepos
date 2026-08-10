@@ -60,12 +60,16 @@ public struct RepoOverview: Sendable, Equatable, Identifiable {
         return false
     }
 
-    /// Something is broken (fetch/status failed) rather than merely dirty —
-    /// drives the status item's error state alongside failing PR checks.
+    /// Something is genuinely broken (git status failing, PR checks failing)
+    /// rather than merely dirty — drives the status item's error state.
+    /// Fetch errors are deliberately excluded: a machine signed into the
+    /// wrong GitHub account has dozens of unreachable repos, which the
+    /// dashboard lumps quietly — a permanent "22" error badge in the menu
+    /// bar would undo that.
     public var hasError: Bool {
-        if git?.hasError == true { return true }
+        if git?.statusError != nil { return true }
         if prs.contains(where: { $0.ci == .fail }) { return true }
-        return worktrees.contains { $0.git?.hasError == true }
+        return worktrees.contains { $0.git?.statusError != nil }
     }
 }
 

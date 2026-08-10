@@ -93,6 +93,8 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     public let behind: Int
     /// Changed/untracked file paths (capped) — LLM job-description input.
     public let changedPaths: [String]
+    /// Where this checkout's branch stands vs main (nil on main/detached).
+    public let mergeState: BranchMergeState?
     /// Most recent activity across the repo and its worktrees (commits or
     /// edits to changed files). Drives recency sorting and the stale list.
     public let lastActivity: Date?
@@ -139,6 +141,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.ahead = git?.ahead ?? 0
         self.behind = git?.behind ?? 0
         self.changedPaths = git?.changedPaths ?? []
+        self.mergeState = git?.mergeState
         self.lastActivity = r.lastActivity
         self.agentTasks = Self.tasks(of: r.agents)
 
@@ -186,6 +189,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.ahead = git?.ahead ?? 0
         self.behind = git?.behind ?? 0
         self.changedPaths = git?.changedPaths ?? []
+        self.mergeState = git?.mergeState
         self.lastActivity = git?.lastActivity
         self.agentTasks = Self.tasks(of: wt.agents)
 
