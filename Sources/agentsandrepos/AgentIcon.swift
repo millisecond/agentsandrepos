@@ -14,8 +14,21 @@ enum AgentIcon {
     static let busy = make(.busy, description: "Agents busy")
     static let waiting = make(.waiting, description: "Agents waiting")
     static let error = make(.error, description: "Repo or PR errors")
+    /// Head with no eyes — the dashboard's animated busy tile overlays its
+    /// own moving eye bars on this base.
+    static let eyeless = make(.eyeless, description: "Agent busy")
 
-    private enum Variant { case idle, busy, waiting, error }
+    private enum Variant { case idle, busy, waiting, error, eyeless }
+
+    // Eye geometry in the 18×17 canvas (AppKit coordinates, bottom-left
+    // origin), exported so the dashboard's animated eyes land exactly where
+    // the static variants draw theirs.
+    static let eyeCentersX: [CGFloat] = [6.6, 11.4]
+    static let eyeBottomY: CGFloat = 5.0
+    static let eyeWidth: CGFloat = 2.2
+    static let eyeTallHeight: CGFloat = 4.4
+    static let eyeShortHeight: CGFloat = 2.4
+    static var canvasHeight: CGFloat { canvas.height }
 
     // Canvas is 18×17pt; the badge circle sits over the bottom-right corner.
     private static let canvas = NSRect(x: 0, y: 0, width: 18, height: 17)
@@ -75,11 +88,11 @@ enum AgentIcon {
         // Eyes sit above the head's vertical center, bottom-aligned so the
         // busy variant's short left eye reads like the tiles' activity bars.
         // The error variant swaps them for dead × eyes.
-        let eyeCenters: [CGFloat] = [6.6, 11.4]
+        if variant == .eyeless { return }
         if variant == .error {
             let cross = NSBezierPath()
             let r: CGFloat = 1.5
-            for cx in eyeCenters {
+            for cx in eyeCentersX {
                 let c = NSPoint(x: cx, y: 7.2)
                 cross.move(to: NSPoint(x: c.x - r, y: c.y - r))
                 cross.line(to: NSPoint(x: c.x + r, y: c.y + r))
@@ -90,11 +103,12 @@ enum AgentIcon {
             cross.lineCapStyle = .round
             cross.stroke()
         } else {
-            let leftHeight: CGFloat = variant == .busy ? 2.4 : 4.4
-            for (cx, height) in zip(eyeCenters, [leftHeight, 4.4]) {
+            let leftHeight = variant == .busy ? eyeShortHeight : eyeTallHeight
+            for (cx, height) in zip(eyeCentersX, [leftHeight, eyeTallHeight]) {
                 NSBezierPath(
-                    roundedRect: NSRect(x: cx - 1.1, y: 5.0, width: 2.2, height: height),
-                    xRadius: 1.1, yRadius: 1.1
+                    roundedRect: NSRect(
+                        x: cx - eyeWidth / 2, y: eyeBottomY, width: eyeWidth, height: height),
+                    xRadius: eyeWidth / 2, yRadius: eyeWidth / 2
                 ).fill()
             }
         }

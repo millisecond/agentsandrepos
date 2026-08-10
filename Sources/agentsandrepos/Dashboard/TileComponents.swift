@@ -261,8 +261,9 @@ struct AgentIconImage: View {
     }
 }
 
-/// Pulsing agent glyph for busy agents — "working". Renders static while the
-/// dashboard is hidden; the animated leaf is only in the hierarchy while
+/// Agent glyph for busy agents — "working": the robot's eye bars seesaw
+/// between short and tall, echoing the activity bars. Renders static while
+/// the dashboard is hidden; the animated leaf is only in the hierarchy while
 /// live, so closing the popover tears the animation down and reopening
 /// starts it fresh.
 struct BusyAgentIcon: View {
@@ -272,7 +273,7 @@ struct BusyAgentIcon: View {
 
     var body: some View {
         if live, !reduceMotion {
-            PulsingAgentIcon(color: color)
+            SeesawEyesAgentIcon(color: color)
         } else {
             AgentIconImage(image: AgentIcon.busy, color: color)
         }
@@ -280,19 +281,33 @@ struct BusyAgentIcon: View {
 }
 
 /// State lives in this leaf so snapshot re-renders don't restart the
-/// pulse phase.
-private struct PulsingAgentIcon: View {
+/// eye phase. Draws the eyeless head image and overlays two capsules at the
+/// exact eye positions (AgentIcon geometry, flipped to SwiftUI's top-left
+/// origin), animating their heights in alternation with bottoms pinned.
+private struct SeesawEyesAgentIcon: View {
     let color: Color
-    @State private var dimmed = false
+    @State private var swapped = false
 
     var body: some View {
-        AgentIconImage(image: AgentIcon.busy, color: color)
-            .opacity(dimmed ? 0.45 : 1)
+        AgentIconImage(image: AgentIcon.eyeless, color: color)
+            .overlay {
+                eye(centerX: AgentIcon.eyeCentersX[0], tall: swapped)
+                eye(centerX: AgentIcon.eyeCentersX[1], tall: !swapped)
+            }
             .onAppear {
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                    dimmed = true
+                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                    swapped = true
                 }
             }
+    }
+
+    private func eye(centerX: CGFloat, tall: Bool) -> some View {
+        let height = tall ? AgentIcon.eyeTallHeight : AgentIcon.eyeShortHeight
+        let bottom = AgentIcon.canvasHeight - AgentIcon.eyeBottomY
+        return Capsule()
+            .fill(color)
+            .frame(width: AgentIcon.eyeWidth, height: height)
+            .position(x: centerX, y: bottom - height / 2)
     }
 }
 
