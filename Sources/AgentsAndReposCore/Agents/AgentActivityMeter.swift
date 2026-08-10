@@ -24,13 +24,16 @@ public struct AgentActivityMeter: Sendable {
     /// tool call that only lands bytes when it finishes), so its strip never
     /// reads as dead air. Bytes can only raise a busy bucket above this.
     public static let busyFloorLevel = (maxLevel + 1) / 2
+    /// Quarter credit for shell buckets — a human at the prompt is activity,
+    /// just not agent throughput.
+    public static let shellFloorLevel = (maxLevel + 1) / 4
 
     private struct Track {
         var lastSize: UInt64
         /// Bytes appended, keyed by absolute bucket index.
         var buckets: [Int64: UInt64] = [:]
-        /// Buckets during which the agent reported busy at least once.
-        var busyBuckets: Set<Int64> = []
+        /// Highest status floor earned per bucket (busy > shell).
+        var floors: [Int64: Int] = [:]
     }
 
     private var tracks: [String: Track] = [:]
@@ -42,17 +45,19 @@ public struct AgentActivityMeter: Sendable {
     /// transcript is not a burst. A shrink (the file was compacted/rewritten)
     /// resets the baseline without counting negative growth.
     public mutating func record(
-        id: String, transcriptSize: UInt64, busy: Bool = false, at now: Date
+        id: String, transcriptSize: UInt64, busy: Bool = false, shell: Bool = false,
+        at now: Date
     ) {
         let bucket = Self.bucket(at: now)
         var track = tracks[id] ?? Track(lastSize: transcriptSize)
         let delta = transcriptSize > track.lastSize ? transcriptSize - track.lastSize : 0
         track.lastSize = transcriptSize
         if delta > 0 { track.buckets[bucket, default: 0] += delta }
-        if busy { track.busyBuckets.insert(bucket) }
+        let floor = busy ? Self.busyFloorLevel : shell ? Self.shellFloorLevel : 0
+        if floor > 0 { track.floors[bucket] = max(track.floors[bucket] ?? 0, floor) }
         let oldest = bucket - Int64(Self.bucketCount)
         track.buckets = track.buckets.filter { $0.key > oldest }
-        track.busyBuckets = track.busyBuckets.filter { $0 > oldest }
+        track.floors = track.floors.filter { $0.key > oldest }
         tracks[id] = track
     }
 
@@ -77,16 +82,14 @@ public struct AgentActivityMeter: Sendable {
     /// a busy tip to half height immediately is the point.
     public func levels(id: String, at now: Date) -> [Int] {
         guard let track = tracks[id],
-            !(track.buckets.isEmpty && track.busyBuckets.isEmpty)
+            !(track.buckets.isEmpty && track.floors.isEmpty)
         else { return [] }
         let newest = Self.bucket(at: now)
         let out = (0..<Self.bucketCount).map { i in
             let bucket = newest - Int64(Self.bucketCount - 1 - i)
             var level = Self.level(forBytes: track.buckets[bucket] ?? 0)
             if bucket == newest { level = min(level, 1) }
-            if track.busyBuckets.contains(bucket) {
-                level = max(level, Self.busyFloorLevel)
-            }
+            if let floor = track.floors[bucket] { level = max(level, floor) }
             return level
         }
         return out.allSatisfy { $0 == 0 } ? [] : out

@@ -13,17 +13,17 @@ struct AgentTileView: View {
     @State private var isHovering = false
 
     var body: some View {
-        Tile(severity: state.severity) {
+        Tile(severity: state.severity, tint: state.phase == .shell ? .teal : nil) {
             VStack(alignment: .leading, spacing: 3) {
                 // The top-right corner stays empty: it belongs to the hover
                 // ignore button, and a stable top row means nothing shifts
                 // when the agent changes phase.
                 if state.phase == .busy {
-                    SpinningGear(color: Color(severity: state.severity))
+                    SpinningGear(color: tint)
                 } else {
                     Image(systemName: symbolName)
                         .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(Color(severity: state.severity))
+                        .foregroundStyle(tint)
                 }
                 // Both message summaries soak up the tile's flexible middle,
                 // in the order the messages actually happened (latest last);
@@ -49,12 +49,12 @@ struct AgentTileView: View {
                 HStack(spacing: 6) {
                     Text(state.statusLabel)
                         .font(.caption2.weight(.medium))
-                        .foregroundStyle(Color(severity: state.severity))
+                        .foregroundStyle(tint)
                         .lineLimit(1)
                     Spacer(minLength: 6)
                     AgentActivityBars(
                         levels: state.activity,
-                        color: Color(severity: state.severity))
+                        color: tint)
                 }
             }
             .padding(9)
@@ -92,9 +92,16 @@ struct AgentTileView: View {
         return ordered.filter { !$0.display.isEmpty }
     }
 
+    /// Shell has no TileSeverity of its own — it renders teal, halfway
+    /// between busy-blue and idle-gray.
+    private var tint: Color {
+        state.phase == .shell ? .teal : Color(severity: state.severity)
+    }
+
     private var symbolName: String {
         switch state.phase {
         case .busy: return "gearshape.fill"
+        case .shell: return "terminal.fill"
         case .waiting: return "pause.circle.fill"
         case .idle: return "moon.zzz.fill"
         case .unknown: return "questionmark.circle"

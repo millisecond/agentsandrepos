@@ -20,15 +20,20 @@ extension Color {
 struct Tile<Content: View>: View {
     let severity: TileSeverity
     var height: CGFloat = 112
+    /// Overrides the severity-derived chrome color (e.g. the shell phase's
+    /// teal, which has no TileSeverity of its own).
+    var tint: Color? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
+        let color = tint ?? Color(severity: severity)
+        let muted = tint == nil && severity == .muted
         content
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(height: height)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(severity: severity).opacity(severity == .muted ? 0.04 : 0.09))
+                    .fill(color.opacity(muted ? 0.04 : 0.09))
             )
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -37,7 +42,7 @@ struct Tile<Content: View>: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(
-                        Color(severity: severity).opacity(severity == .muted ? 0.25 : 0.55),
+                        color.opacity(muted ? 0.25 : 0.55),
                         lineWidth: 1.5)
             )
     }

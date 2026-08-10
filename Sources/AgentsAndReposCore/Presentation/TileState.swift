@@ -15,7 +15,7 @@ public enum TileSeverity: Sendable, Equatable, Comparable {
 /// or an abbreviated path).
 public struct AgentTileState: Sendable, Equatable, Identifiable {
     public enum Phase: Sendable, Equatable {
-        case idle, busy, waiting, unknown
+        case idle, busy, shell, waiting, unknown
     }
 
     public let id: String
@@ -43,6 +43,11 @@ public struct AgentTileState: Sendable, Equatable, Identifiable {
         case .busy:
             phase = .busy
             severity = .info
+        case .shell:
+            // Between busy and idle; the view tints this teal, halfway
+            // between busy-blue and idle-gray.
+            phase = .shell
+            severity = .muted
         case .idle:
             phase = .idle
             severity = .muted
@@ -280,7 +285,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
             switch agent.status {
             case .waiting: return .attention
             case .busy: return .info
-            case .idle, .unknown: return .muted
+            case .shell, .idle, .unknown: return .muted
             }
         }
     }

@@ -66,8 +66,9 @@ public enum AgentSessionReader {
         switch s {
         case .waiting: return 0
         case .busy: return 1
-        case .unknown: return 2
-        case .idle: return 3
+        case .shell: return 2
+        case .unknown: return 3
+        case .idle: return 4
         }
     }
 
@@ -96,6 +97,7 @@ public enum AgentSessionReader {
         switch dto.status {
         case "idle": status = .idle
         case "busy": status = .busy
+        case "shell": status = .shell
         case "waiting": status = .waiting(dto.waitingFor)
         case let other?: status = .unknown(other)
         case nil: status = .unknown("unknown")

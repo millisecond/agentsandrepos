@@ -5,11 +5,19 @@ public struct AgentSession: Sendable, Equatable, Identifiable {
     public enum Status: Sendable, Equatable {
         case idle
         case busy
+        /// The human is at a shell prompt inside the session — not the agent
+        /// working, but not asleep either. An intermediate state.
+        case shell
         case waiting(String?)
         case unknown(String)
 
         public var isBusy: Bool {
             if case .busy = self { return true }
+            return false
+        }
+
+        public var isShell: Bool {
+            if case .shell = self { return true }
             return false
         }
 
@@ -25,6 +33,7 @@ public struct AgentSession: Sendable, Equatable, Identifiable {
             switch self {
             case .idle: return "idle"
             case .busy: return "busy"
+            case .shell: return "shell"
             case .waiting(let what):
                 if let what, !what.isEmpty { return "waiting: \(what)" }
                 return "waiting"
@@ -36,6 +45,7 @@ public struct AgentSession: Sendable, Equatable, Identifiable {
             switch self {
             case .idle: return "·"
             case .busy: return "⚙"
+            case .shell: return "❯"
             case .waiting: return "⏸"
             case .unknown: return "?"
             }

@@ -145,6 +145,19 @@ final class AgentActivityMeterTests: XCTestCase {
         XCTAssertTrue(levels.dropLast().allSatisfy { $0 == 0 })
     }
 
+    func testShellFloorIsQuarterCredit() {
+        var m = AgentActivityMeter()
+        m.record(id: "a", transcriptSize: 0, shell: true, at: at(bucket: 0))
+        let levels = m.levels(id: "a", at: at(bucket: 0))
+        XCTAssertEqual(levels.last, AgentActivityMeter.shellFloorLevel)
+        XCTAssertLessThan(
+            AgentActivityMeter.shellFloorLevel, AgentActivityMeter.busyFloorLevel)
+        // Busy in the same bucket outranks the shell floor.
+        m.record(id: "a", transcriptSize: 0, busy: true, at: at(bucket: 0))
+        XCTAssertEqual(
+            m.levels(id: "a", at: at(bucket: 0)).last, AgentActivityMeter.busyFloorLevel)
+    }
+
     func testBusyFloorLiftsSmallByteBuckets() {
         var m = AgentActivityMeter()
         m.record(id: "a", transcriptSize: 0, busy: true, at: at(bucket: 0))

@@ -454,7 +454,8 @@ public actor RefreshEngine {
                 cwd: s.cwd, sessionId: s.sessionId)
             {
                 activityMeter.record(
-                    id: s.sessionId, transcriptSize: size, busy: s.status.isBusy, at: now)
+                    id: s.sessionId, transcriptSize: size, busy: s.status.isBusy,
+                    shell: s.status.isShell, at: now)
             }
             read[i] = s.withActivity(activityMeter.levels(id: s.sessionId, at: now))
         }
