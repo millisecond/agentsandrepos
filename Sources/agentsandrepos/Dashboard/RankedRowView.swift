@@ -26,7 +26,7 @@ struct RowChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, 9)
-            .padding(.vertical, 8)
+            .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -45,31 +45,24 @@ struct RowChrome: ViewModifier {
     }
 }
 
-/// Hover-revealed primary-action button at a row's trailing edge: names the
-/// click destination ("↗ GitHub", "↗ Finder", "↗ Terminal") and performs it.
-/// Bigger and labeled — the affordance is the button, not an icon morph.
-struct OpenDestinationButton: View {
+/// Hover-revealed hint in a row's bottom-right corner naming where a click
+/// lands ("↗ GitHub", "↗ Finder", "↗ Terminal"). Purely informational — the
+/// row's own tap performs the action, so clicks pass straight through.
+struct DestinationHint: View {
     let symbol: String
     let label: String
-    let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 8, weight: .bold))
-                Image(systemName: symbol)
-                    .font(.system(size: 10))
-                Text(label)
-                    .font(.caption.weight(.semibold))
-            }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(.thickMaterial))
-            .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 1))
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.up.right")
+                .font(.system(size: 7, weight: .bold))
+            Image(systemName: symbol)
+                .font(.system(size: 8))
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(.tertiary)
+        .allowsHitTesting(false)
     }
 }
 
@@ -187,8 +180,6 @@ private struct RepoRowView: View {
             // Hover controls appear in the spacer's empty gap, LEFT of the
             // persistent meta — dots, counts, and timestamp never move.
             if isHovering {
-                OpenDestinationButton(
-                    symbol: destinationSymbol, label: destinationLabel, action: performPrimary)
                 ellipsisMenu
             }
             if !state.agentDots.isEmpty {
@@ -205,6 +196,13 @@ private struct RepoRowView: View {
             AgoText(date: state.lastActivity)
         }
         .modifier(RowChrome(severity: state.severity))
+        .overlay(alignment: .bottomTrailing) {
+            if isHovering {
+                DestinationHint(symbol: destinationSymbol, label: destinationLabel)
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 5)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
         // The row's click goes where the top problem can be acted on — a
@@ -386,9 +384,6 @@ private struct PRRowView: View {
             }
             Spacer(minLength: 8)
             if isHovering {
-                OpenDestinationButton(symbol: "globe", label: "GitHub") {
-                    actions.openURL(state.url)
-                }
                 ellipsisMenu
             }
             if state.isDraft {
@@ -405,6 +400,13 @@ private struct PRRowView: View {
             AgoText(date: state.updatedAt)
         }
         .modifier(RowChrome(severity: state.severity))
+        .overlay(alignment: .bottomTrailing) {
+            if isHovering {
+                DestinationHint(symbol: "globe", label: "GitHub")
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 5)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
         .onTapGesture { actions.openURL(state.url) }
