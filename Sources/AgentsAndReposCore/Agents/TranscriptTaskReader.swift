@@ -195,9 +195,18 @@ public enum TranscriptTaskReader {
         var type: String?
         var isSidechain: Bool?
         var isMeta: Bool?
+        var isCompactSummary: Bool?
         var message: Msg?
         var origin: Origin?
     }
+
+    /// Compaction/resume inserts a synthetic user message carrying the prior
+    /// conversation's summary. Older Claude Code versions don't flag it, so
+    /// also match the boilerplate it always opens with.
+    private static let continuationPrefixes = [
+        "This session is being continued from a previous conversation",
+        "Continue from previous context",
+    ]
 
     /// The cleaned prompt text if this transcript line is a human-typed
     /// message, else nil.
@@ -207,6 +216,7 @@ public enum TranscriptTaskReader {
             dto.type == "user",
             dto.isSidechain != true,
             dto.isMeta != true,
+            dto.isCompactSummary != true,
             dto.message?.role == "user"
         else { return nil }
         if let kind = dto.origin?.kind, kind != "human" { return nil }
@@ -232,6 +242,12 @@ public enum TranscriptTaskReader {
         // "<" catches system-reminder / command wrappers; "[" catches
         // interruption markers like "[Request interrupted by user]".
         guard !trimmed.isEmpty, !trimmed.hasPrefix("<"), !trimmed.hasPrefix("[") else {
+            return nil
+        }
+        // Skipping the continuation boilerplate lets the backward scan fall
+        // through to the user's actual last prompt in the replayed history —
+        // far more useful on a tile than "Continue from previous context".
+        guard !Self.continuationPrefixes.contains(where: trimmed.hasPrefix) else {
             return nil
         }
         return clean(trimmed)

@@ -13,7 +13,7 @@ struct AgentTileView: View {
     @State private var isHovering = false
 
     var body: some View {
-        Tile(severity: state.severity, tint: state.phase == .shell ? .teal : nil) {
+        Tile(severity: state.severity, tint: tileTint) {
             VStack(alignment: .leading, spacing: 3) {
                 // The top-right corner stays empty: it belongs to the hover
                 // ignore button, and a stable top row means nothing shifts
@@ -92,10 +92,19 @@ struct AgentTileView: View {
         return ordered.filter { !$0.display.isEmpty }
     }
 
-    /// Shell has no TileSeverity of its own — it renders teal, halfway
-    /// between busy-blue and idle-gray.
+    /// Phases without a TileSeverity of their own: shell renders teal
+    /// (between busy-blue and idle-gray); unknown renders indigo so an
+    /// unrecognized status is visibly not the same thing as asleep-gray.
+    private var tileTint: Color? {
+        switch state.phase {
+        case .shell: return .teal
+        case .unknown: return .indigo
+        case .idle, .busy, .waiting: return nil
+        }
+    }
+
     private var tint: Color {
-        state.phase == .shell ? .teal : Color(severity: state.severity)
+        tileTint ?? Color(severity: state.severity)
     }
 
     private var symbolName: String {
@@ -104,7 +113,7 @@ struct AgentTileView: View {
         case .shell: return "terminal.fill"
         case .waiting: return "pause.circle.fill"
         case .idle: return "moon.zzz.fill"
-        case .unknown: return "questionmark.circle"
+        case .unknown: return "questionmark.circle.fill"
         }
     }
 }

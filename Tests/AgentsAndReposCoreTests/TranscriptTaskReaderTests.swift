@@ -105,6 +105,33 @@ final class TranscriptTaskReaderTests: XCTestCase {
         XCTAssertNil(TranscriptTaskReader.assistantText(fromLine: userLine("hi")))
     }
 
+    func testContinuationSummariesSkipped() {
+        // Newer Claude Code flags the synthetic compaction message.
+        XCTAssertNil(TranscriptTaskReader.promptText(fromLine: Substring(
+            #"{"type":"user","isCompactSummary":true,"message":{"role":"user","content":"summary of the prior conversation"}}"#)))
+        // Older versions don't — match the boilerplate it opens with.
+        XCTAssertNil(TranscriptTaskReader.promptText(fromLine: userLine(
+            "This session is being continued from a previous conversation that ran"
+                + " out of context. The conversation is summarized below: ...")))
+        XCTAssertNil(TranscriptTaskReader.promptText(
+            fromLine: userLine("Continue from previous context")))
+    }
+
+    func testScanFallsThroughContinuationToRealPrompt() {
+        // After a compaction the synthetic summary is the newest user line;
+        // the tile should surface the human's actual command behind it.
+        let chunk = Data(
+            """
+            \(userLine("ship the new dashboard"))
+            \(assistantLine(#"{"type":"text","text":"working on it"}"#))
+            \(userLine("This session is being continued from a previous conversation that ran out of context."))
+            """.utf8)
+        let task = TranscriptTaskReader.lastMessages(in: chunk)
+        XCTAssertEqual(task.lastUserMessage, "ship the new dashboard")
+        XCTAssertEqual(task.lastAgentMessage, "working on it")
+        XCTAssertFalse(task.userSpokeLast)
+    }
+
     // MARK: - Chunk scanning
 
     func testLastMessagesAndOrderUserLast() {
