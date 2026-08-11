@@ -29,6 +29,15 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
 
     var isShown: Bool { popover.isShown }
 
+    /// Screen frame of the popover's window while shown (demo capture region).
+    var popoverWindowFrame: NSRect? { popover.contentViewController?.view.window?.frame }
+
+    /// Re-key the popover window (demo choreography, after focus was stolen).
+    func makeKeyIfShown() {
+        guard popover.isShown else { return }
+        popover.contentViewController?.view.window?.makeKey()
+    }
+
     /// Fires with true on show and false on close — the engine uses this to
     /// front-run GitHub refreshes and follow in-flight workflow runs.
     var onVisibilityChange: ((Bool) -> Void)?
@@ -45,7 +54,9 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
         self.store = store
         self.perf = perf
         super.init()
-        popover.behavior = .transient
+        // Demo recordings must survive stray clicks; .applicationDefined
+        // popovers never self-dismiss.
+        popover.behavior = DemoMode.enabled ? .applicationDefined : .transient
         popover.animates = false
         popover.delegate = self
         let hosting = NSHostingController(
@@ -88,10 +99,14 @@ final class DashboardPopoverController: NSObject, NSPopoverDelegate {
         // Transient popovers in .accessory apps don't reliably dismiss when the
         // click lands in another app. Global monitors never see our own app's
         // events, so this can't interfere with in-popover clicks/context menus.
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] _ in
-            Task { @MainActor in self?.close() }
+        // Skipped in demo mode: a physical click mid-recording must not kill
+        // the shot.
+        if !DemoMode.enabled {
+            globalMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown]
+            ) { [weak self] _ in
+                Task { @MainActor in self?.close() }
+            }
         }
     }
 

@@ -2,6 +2,8 @@
 
 *(binary and formula name: `agentsandrepos`)*
 
+![Agents & Repos demo](docs/demo.gif)
+
 A macOS menubar app that gives you one place to see the endless onslaught of
 info that agentic programming produces:
 

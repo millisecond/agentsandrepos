@@ -335,6 +335,7 @@ private struct RepoRowView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("More actions")
+        .background(DemoFrameReporter(kind: .ellipsis, id: state.id))
     }
 }
 

@@ -16,7 +16,9 @@ protocol MenuActionDelegate: AnyObject {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var engine: RefreshEngine!
+    /// Nil in demo mode — the UI runs on DemoTimeline snapshots instead.
+    private var engine: RefreshEngine?
+    private var demoDriver: DemoDriver?
     private var statusController: StatusItemController!
     private var settingsController: SettingsWindowController?
     private var watcher: DirectoryWatcher?
@@ -37,10 +39,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updates: updateChecker, perf: perfMonitor)
         actions.closePopover = { [weak self] in self?.popoverController.close() }
         statusController.popoverController = popoverController
+
+        // Demo mode: no engine, no watcher, no network, no perf banner —
+        // DemoDriver feeds scripted snapshots straight into the store.
+        if DemoMode.enabled {
+            demoDriver = DemoDriver(
+                store: store, statusController: statusController,
+                popoverController: popoverController)
+            demoDriver?.start()
+            return
+        }
+
         updateChecker.start()
         perfMonitor.start()
 
-        engine = RefreshEngine(config: config) { [weak self] snap in
+        let engine = RefreshEngine(config: config) { [weak self] snap in
             Task { @MainActor in
                 guard let self else { return }
                 self.lastSnapshot = snap
@@ -49,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.summaryService.update(snapshot: snap)
             }
         }
-        let engine = engine!
+        self.engine = engine
         Task { await engine.start() }
 
         popoverController.onVisibilityChange = { visible in
@@ -69,49 +82,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func didWake(_ notification: Notification) {
-        let engine = engine!
+        guard let engine else { return }
         Task { await engine.kickLight() }
     }
 }
 
 extension AppDelegate: MenuActionDelegate {
     func menuOpened() {
-        let engine = engine!
+        guard let engine else { return }
         Task { await engine.kickLight() }
     }
 
     func refreshNow() {
-        let engine = engine!
+        guard let engine else { return }
         Task { await engine.kickAll() }
     }
 
     func togglePRScope() {
-        let engine = engine!
+        guard let engine else { return }
         Task { await engine.togglePRScope() }
     }
 
     func toggleAutoFetch() {
-        let engine = engine!
+        guard let engine else { return }
         Task { await engine.toggleAutoFetch() }
     }
 
     func fetchRepo(path: String) {
-        let engine = engine!
+        guard let engine else { return }
         Task { await engine.fetchNow(path: path) }
     }
 
     func setRepoIgnored(path: String, ignored: Bool) {
-        let engine = engine!
+        guard let engine else { return }
         Task { await engine.setRepoIgnored(path: path, ignored: ignored) }
     }
 
     func setAgentIgnored(sessionId: String, ignored: Bool) {
-        let engine = engine!
+        guard let engine else { return }
         Task { await engine.setAgentIgnored(sessionId: sessionId, ignored: ignored) }
     }
 
     func setSectionExpanded(section: DashboardSection, expanded: Bool) {
-        let engine = engine!
+        guard let engine else { return }
         Task { await engine.setSectionExpanded(section, expanded: expanded) }
     }
 
@@ -120,8 +133,9 @@ extension AppDelegate: MenuActionDelegate {
             settingsController = SettingsWindowController(summaries: summaryService) {
                 [weak self] newConfig in
                 guard let self else { return }
-                let engine = self.engine!
-                Task { await engine.updateConfig(newConfig) }
+                if let engine = self.engine {
+                    Task { await engine.updateConfig(newConfig) }
+                }
                 self.settingsController?.close()
             }
         }

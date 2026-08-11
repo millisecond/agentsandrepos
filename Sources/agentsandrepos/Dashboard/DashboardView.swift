@@ -164,6 +164,7 @@ struct DashboardView: View {
                             item: item,
                             summary: rowSummary(for: item),
                             actions: actions)
+                            .background(DemoFrameReporter(kind: .row, id: item.id))
                     }
                 }
             }

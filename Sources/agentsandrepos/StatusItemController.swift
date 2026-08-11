@@ -9,6 +9,8 @@ final class StatusItemController: NSObject {
     /// Set by AppDelegate after construction (the popover needs the store,
     /// which needs the controller-independent wiring).
     var popoverController: DashboardPopoverController?
+    /// Anchor for programmatic popover opening (demo mode).
+    var button: NSStatusBarButton? { statusItem.button }
 
     init(delegate: any MenuActionDelegate) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

@@ -18,6 +18,8 @@ if arguments.contains("--help") || arguments.first == "help" {
           agentsandrepos snapshot    print a one-shot overview to stdout
                           --no-prs   skip GitHub PR lookup
           agentsandrepos --version   print version
+          agentsandrepos --demo      run the UI on scripted fake data (README
+                                     recording; see scripts/record-demo.sh)
           agentsandrepos unregister-login
                                      remove the login item (used by uninstall)
 
@@ -53,7 +55,14 @@ if arguments.first == "snapshot" {
     exit(0)
 }
 
-guard SingleInstanceLock.acquire() else {
+// Demo mode locks on its own path so a recording can run beside the user's
+// resident instance (the record script quits the real one anyway, to keep a
+// second menubar icon out of frame).
+let lockPath =
+    DemoMode.enabled
+    ? NSHomeDirectory() + "/.config/agentsandrepos/demo.lock"
+    : SingleInstanceLock.defaultPath
+guard SingleInstanceLock.acquire(path: lockPath) else {
     FileHandle.standardError.write(Data("\(AppInfo.displayName) is already running\n".utf8))
     exit(0)
 }
