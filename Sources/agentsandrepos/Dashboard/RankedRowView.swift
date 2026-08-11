@@ -169,7 +169,9 @@ private struct RepoRowView: View {
                         copyValue: state.branch,
                         color: .secondary,
                         copy: actions.copyText)
-                    if let merge = state.mergeState {
+                    if let reason = state.pruneReason {
+                        PruneableBadge(help: reason)
+                    } else if let merge = state.mergeState {
                         MergeStateBadge(state: merge)
                     }
                 }

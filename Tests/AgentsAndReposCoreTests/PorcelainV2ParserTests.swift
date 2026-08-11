@@ -64,4 +64,32 @@ final class PorcelainV2ParserTests: XCTestCase {
         XCTAssertNil(s.branch)
         XCTAssertTrue(s.detached)
     }
+
+    /// Upstream configured but no branch.ab line: git couldn't resolve the
+    /// ref, i.e. the remote branch was deleted (typical after a PR merges).
+    func testUpstreamGone() {
+        let gone = PorcelainV2Parser.parse(
+            """
+            # branch.oid abc
+            # branch.head feature/x
+            # branch.upstream origin/feature/x
+            """)
+        XCTAssertTrue(gone.upstreamGone)
+
+        let tracking = PorcelainV2Parser.parse(
+            """
+            # branch.oid abc
+            # branch.head feature/x
+            # branch.upstream origin/feature/x
+            # branch.ab +0 -0
+            """)
+        XCTAssertFalse(tracking.upstreamGone)
+
+        let noUpstream = PorcelainV2Parser.parse(
+            """
+            # branch.oid abc
+            # branch.head feature/x
+            """)
+        XCTAssertFalse(noUpstream.upstreamGone)
+    }
 }

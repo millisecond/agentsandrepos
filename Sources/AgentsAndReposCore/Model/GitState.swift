@@ -8,6 +8,10 @@ public struct GitState: Sendable, Equatable {
     public var headOid: String?
     public var detached: Bool
     public var upstream: String?
+    /// Upstream is configured but its ref no longer exists — the remote branch
+    /// was deleted (typically after a PR merged). Catches squash/rebase merges
+    /// that ancestry-based `mergeState` can't see.
+    public var upstreamGone: Bool
     public var ahead: Int
     public var behind: Int
     /// Tracked files with staged/unstaged/conflicted changes.
@@ -31,6 +35,7 @@ public struct GitState: Sendable, Equatable {
         headOid: String? = nil,
         detached: Bool = false,
         upstream: String? = nil,
+        upstreamGone: Bool = false,
         ahead: Int = 0,
         behind: Int = 0,
         dirty: Int = 0,
@@ -46,6 +51,7 @@ public struct GitState: Sendable, Equatable {
         self.headOid = headOid
         self.detached = detached
         self.upstream = upstream
+        self.upstreamGone = upstreamGone
         self.ahead = ahead
         self.behind = behind
         self.dirty = dirty
@@ -85,6 +91,7 @@ public struct GitState: Sendable, Equatable {
             if behind > 0 { arrows += "↓\(behind)" }
             parts.append(arrows)
         }
+        if upstreamGone { parts.append("·gone") }
         if fetchError != nil || statusError != nil { parts.append("⚠︎") }
         if let mergeState { parts.append("·\(mergeState.compactLabel)") }
         return parts.joined(separator: " ")

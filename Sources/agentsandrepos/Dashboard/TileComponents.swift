@@ -94,6 +94,24 @@ struct MergeStateBadge: View {
     }
 }
 
+/// Replaces MergeStateBadge when the worktree is actually done: merged (or
+/// upstream deleted) AND clean AND agent-free. "Merged" states a fact;
+/// "pruneable" states the conclusion, so only one shows at a time.
+struct PruneableBadge: View {
+    /// Which signals fired — shown on hover.
+    let help: String
+
+    var body: some View {
+        Text("pruneable")
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(.green)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 0.5)
+            .background(Capsule().fill(Color.green.opacity(0.14)))
+            .help(help)
+    }
+}
+
 /// Corner indicator on repo tiles: CI dot (worst status) + PR count.
 struct PRIndicator: View {
     let ci: PullRequest.CIStatus

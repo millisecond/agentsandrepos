@@ -471,4 +471,76 @@ final class TileStateTests: XCTestCase {
             git: GitState(branch: "b"), agents: [])
         XCTAssertEqual(WorktreeTileState(worktree: idle, repoName: "r").severity, .ok)
     }
+
+    // MARK: - Pruneable worktrees
+
+    private func worktreeTile(
+        git: GitState?, agents: [AgentSession] = [],
+        locked: Bool = false, prunable: Bool = false
+    ) -> RepoTileState {
+        let wt = WorktreeOverview(
+            worktree: Worktree(
+                path: "/wt/r-b", branch: "b", detached: false, isClaudeManaged: false,
+                locked: locked, prunable: prunable),
+            git: git, agents: agents)
+        return RepoTileState(worktree: wt, parent: repo(worktrees: [wt]))
+    }
+
+    func testMergedCleanAgentFreeWorktreeIsPruneable() {
+        let tile = worktreeTile(git: GitState(branch: "b", mergeState: .mergedRemote))
+        XCTAssertTrue(tile.isPruneable)
+        XCTAssertNotNil(tile.pruneReason)
+    }
+
+    func testUpstreamGoneCountsAsPruneableDespiteUnmergedAncestry() {
+        // Squash-merged: original commits aren't in main's history, but the
+        // remote branch was deleted after the merge.
+        let tile = worktreeTile(
+            git: GitState(branch: "b", upstreamGone: true, mergeState: .unmerged))
+        XCTAssertTrue(tile.isPruneable)
+    }
+
+    func testPruneableRequiresCleanPushedAgentFreeUnlocked() {
+        let merged = GitState(branch: "b", mergeState: .mergedRemote)
+
+        var dirty = merged
+        dirty.dirty = 1
+        XCTAssertFalse(worktreeTile(git: dirty).isPruneable)
+
+        var untracked = merged
+        untracked.untracked = 1
+        XCTAssertFalse(worktreeTile(git: untracked).isPruneable)
+
+        var ahead = merged
+        ahead.ahead = 1
+        XCTAssertFalse(worktreeTile(git: ahead).isPruneable)
+
+        // Any session — even idle — breaks if its worktree is removed.
+        XCTAssertFalse(worktreeTile(git: merged, agents: [agent(.idle)]).isPruneable)
+        XCTAssertFalse(worktreeTile(git: merged, locked: true).isPruneable)
+
+        // mergedLocal isn't the strong claim; origin doesn't have it yet.
+        XCTAssertFalse(
+            worktreeTile(git: GitState(branch: "b", mergeState: .mergedLocal)).isPruneable)
+        // Behind alone doesn't block removal.
+        var behind = merged
+        behind.behind = 3
+        XCTAssertTrue(worktreeTile(git: behind).isPruneable)
+    }
+
+    func testMergedBadgeStateNeverPruneableOnRepoTiles() {
+        let tile = RepoTileState(
+            repo: repo(git: GitState(branch: "b", mergeState: .mergedRemote)))
+        XCTAssertFalse(tile.isPruneable)
+    }
+
+    func testStaleWorktreeRecordIsMutedCleanupNoteNotError() {
+        // Directory gone: git status fails there, but the row shouldn't go
+        // red — it's a `git worktree prune` chore.
+        let tile = worktreeTile(
+            git: GitState(branch: "b", statusError: "not a directory"), prunable: true)
+        XCTAssertEqual(tile.severity, .muted)
+        XCTAssertEqual(tile.problems.map(\.label), ["stale worktree record"])
+        XCTAssertFalse(tile.isPruneable)
+    }
 }

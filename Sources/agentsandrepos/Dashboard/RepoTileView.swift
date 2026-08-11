@@ -29,7 +29,9 @@ struct RepoTileView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if let merge = state.mergeState {
+                    if let reason = state.pruneReason {
+                        PruneableBadge(help: reason)
+                    } else if let merge = state.mergeState {
                         MergeStateBadge(state: merge)
                     }
                 }

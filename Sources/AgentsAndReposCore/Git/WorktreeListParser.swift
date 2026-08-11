@@ -8,10 +8,18 @@ public enum WorktreeListParser {
         var path: String?
         var branch: String?
         var detached = false
+        var locked = false
+        var prunable = false
         var isFirstEntry = true
 
         func flush() {
-            defer { path = nil; branch = nil; detached = false }
+            defer {
+                path = nil
+                branch = nil
+                detached = false
+                locked = false
+                prunable = false
+            }
             guard let p = path else { return }
             // Git lists the main worktree first even when invoked from a
             // linked worktree; skipping by position (not just path) keeps a
@@ -24,7 +32,9 @@ public enum WorktreeListParser {
                 path: canonical,
                 branch: branch,
                 detached: detached,
-                isClaudeManaged: looksClaudeManaged(canonical)))
+                isClaudeManaged: looksClaudeManaged(canonical),
+                locked: locked,
+                prunable: prunable))
         }
 
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -38,6 +48,10 @@ public enum WorktreeListParser {
                 branch = b
             } else if line == "detached" {
                 detached = true
+            } else if line == "locked" || line.hasPrefix("locked ") {
+                locked = true
+            } else if line == "prunable" || line.hasPrefix("prunable ") {
+                prunable = true
             }
         }
         flush()

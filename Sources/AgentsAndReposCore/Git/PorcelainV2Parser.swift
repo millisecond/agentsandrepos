@@ -7,6 +7,7 @@ public enum PorcelainV2Parser {
 
     public static func parse(_ text: String) -> GitState {
         var state = GitState()
+        var sawAheadBehind = false
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
             if line.hasPrefix("# branch.oid ") {
                 let oid = String(line.dropFirst("# branch.oid ".count))
@@ -21,6 +22,7 @@ public enum PorcelainV2Parser {
             } else if line.hasPrefix("# branch.upstream ") {
                 state.upstream = String(line.dropFirst("# branch.upstream ".count))
             } else if line.hasPrefix("# branch.ab ") {
+                sawAheadBehind = true
                 for part in line.dropFirst("# branch.ab ".count).split(separator: " ") {
                     if part.hasPrefix("+") {
                         state.ahead = Int(part.dropFirst()) ?? 0
@@ -36,6 +38,10 @@ public enum PorcelainV2Parser {
                 addPath(String(line.dropFirst(2)), to: &state)
             }
         }
+        // Git prints branch.upstream whenever one is configured, but branch.ab
+        // only when the upstream ref actually resolves — set-but-unresolvable
+        // means the remote branch was deleted.
+        state.upstreamGone = state.upstream != nil && !sawAheadBehind
         return state
     }
 

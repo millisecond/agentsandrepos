@@ -95,6 +95,14 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     public let changedPaths: [String]
     /// Where this checkout's branch stands vs main (nil on main/detached).
     public let mergeState: BranchMergeState?
+    /// Upstream configured but its remote branch deleted — the post-merge
+    /// cleanup signal that also catches squash/rebase merges.
+    public let upstreamGone: Bool
+    /// `git worktree lock`ed — never claim it's removable.
+    public let locked: Bool
+    /// Git says only the admin record remains (directory gone) —
+    /// `git worktree prune` territory, not a live checkout.
+    public let stale: Bool
     /// Most recent activity across the repo and its worktrees (commits or
     /// edits to changed files). Drives recency sorting and the stale list.
     public let lastActivity: Date?
@@ -142,6 +150,9 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.behind = git?.behind ?? 0
         self.changedPaths = git?.changedPaths ?? []
         self.mergeState = git?.mergeState
+        self.upstreamGone = git?.upstreamGone ?? false
+        self.locked = false
+        self.stale = false
         self.lastActivity = r.lastActivity
         self.agentTasks = Self.tasks(of: r.agents)
 
@@ -190,6 +201,9 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.behind = git?.behind ?? 0
         self.changedPaths = git?.changedPaths ?? []
         self.mergeState = git?.mergeState
+        self.upstreamGone = git?.upstreamGone ?? false
+        self.locked = wt.worktree.locked
+        self.stale = wt.worktree.prunable
         self.lastActivity = git?.lastActivity
         self.agentTasks = Self.tasks(of: wt.agents)
 
@@ -205,9 +219,13 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.waitingAgentPid = Self.waitingPid(of: wt.agents)
         self.worktrees = []
 
-        self.severity = Self.severity(
-            hasError: hasError, worstCI: worstCI, worstRun: nil, git: git,
-            agentDots: agentDots, unreachable: unreachable)
+        // A stale record's status error is just "the directory is gone" —
+        // that's a cleanup note, not a red row.
+        self.severity = wt.worktree.prunable
+            ? .muted
+            : Self.severity(
+                hasError: hasError, worstCI: worstCI, worstRun: nil, git: git,
+                agentDots: agentDots, unreachable: unreachable)
     }
 
     /// Actual failures needing a human, worst first — each with the URL where
@@ -215,7 +233,13 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     /// Distinct from `stateInfo`: dirty files are normal work, not a problem.
     public var problems: [RepoProblem] {
         var list: [RepoProblem] = []
-        if hasError {
+        if stale {
+            list.append(
+                RepoProblem(
+                    label: "stale worktree record",
+                    detail: "directory is gone — git worktree prune",
+                    url: nil, severity: .info))
+        } else if hasError {
             list.append(RepoProblem(label: "git status broken", url: nil, severity: .urgent))
         }
         for run in runs where run.state == .failed {
@@ -248,6 +272,29 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
             FailingPRRef(number: $0.number, title: $0.title, url: $0.url, checks: $0.failingChecks)
         }
     }
+
+    /// Why this worktree is done and safe to remove — nil when it isn't.
+    /// "Merged" alone overstates safety: the checkout must also be clean,
+    /// have nothing to push, and host no agent sessions (removing a worktree
+    /// under a live agent breaks the session). Mirrors git's own gate —
+    /// `git worktree remove` refuses a dirty tree without --force — so this
+    /// never claims something git would then reject. A gone upstream counts
+    /// as merged because ancestry-based `mergeState` can't see squash/rebase
+    /// merges; deleting the remote branch is the standard post-merge cleanup.
+    public var pruneReason: String? {
+        guard isWorktree, !locked, !stale, !hasError,
+            dirty == 0, untracked == 0, ahead == 0, agentDots.isEmpty
+        else { return nil }
+        if mergeState == .mergedRemote {
+            return "Branch is merged into origin's main and the checkout is clean — safe to remove this worktree"
+        }
+        if upstreamGone {
+            return "Upstream branch was deleted on origin (merged then cleaned up?) and the checkout is clean — likely safe to remove this worktree"
+        }
+        return nil
+    }
+
+    public var isPruneable: Bool { pruneReason != nil }
 
     /// Neutral description of in-flight work — worth knowing, nothing to fix.
     public var stateInfo: [String] {
