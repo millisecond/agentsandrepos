@@ -14,7 +14,7 @@ struct NotificationPromptBanner: View {
                 .font(.system(size: 15))
                 .foregroundStyle(.blue)
             Text(
-                "Get important local notifications about Git builds/actions and permission requests"
+                "Get important local notifications about agent permission requests and Git builds/actions"
             )
             .font(.caption)
             .fixedSize(horizontal: false, vertical: true)

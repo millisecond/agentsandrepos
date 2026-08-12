@@ -5,7 +5,7 @@ Status: implemented on `notifications-exploration` (default off, opt-in).
 ## What ships
 
 - **Opt-in banner** at the top of the dashboard: "Get important local
-  notifications about Git builds/actions and permission requests", with
+  notifications about agent permission requests and Git builds/actions", with
   Dismiss and Enable. First render stamps
   `notificationsPromptFirstShownAt`; the banner ages out 24h later on its
   own (`NotificationPrompt.shouldShow`). Dismiss and Enable both retire it
