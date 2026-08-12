@@ -57,6 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateChecker.start()
         perfMonitor.start()
         notifications = NotificationCoordinator()
+        // Already enabled from a previous run: make sure the system-level
+        // grant exists (first bundled launch after enabling in a dev build
+        // would otherwise never prompt).
+        if config.notificationsEnabled { notifications?.requestAuthorization() }
 
         let engine = RefreshEngine(config: config) { [weak self] snap in
             Task { @MainActor in
