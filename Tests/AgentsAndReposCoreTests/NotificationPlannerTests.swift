@@ -67,6 +67,7 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertEqual(notes[0].kind, .actionPassed)
         XCTAssertTrue(notes[0].title.contains("passed"))
         XCTAssertTrue(notes[0].body.contains("app"))
+        XCTAssertEqual(notes[0].target, .url("https://github.com/o/r/actions/runs/1"))
         // Re-ingesting the completed run stays quiet.
         XCTAssertEqual(p.ingest(done, now: t0.addingTimeInterval(120)), [])
     }
@@ -175,6 +176,7 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertEqual(notes[0].kind, .agentWaiting)
         XCTAssertTrue(notes[0].title.contains("fixer"))
         XCTAssertTrue(notes[0].body.contains("permission"))
+        XCTAssertEqual(notes[0].target, .agent(pid: 100, cwd: "/p/app"))
         // Still waiting: no repeat.
         XCTAssertEqual(p.ingest(snap, now: t0.addingTimeInterval(600)), [])
     }

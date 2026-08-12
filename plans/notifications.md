@@ -39,11 +39,15 @@ Status: implemented on `notifications-exploration` (default off, opt-in).
   where the UN framework traps without a bundle. Passed runs deliver
   silently; failures and waiting agents get the default sound.
 
+- **Click-through** (bundled app only): clicking a notification goes where
+  clicking the matching tile would — a finished run opens its GitHub page,
+  a waiting agent focuses its terminal window via `TerminalFocus` (Finder
+  fallback). `PlannedNotification.ClickTarget` rides in the UN userInfo;
+  `NotificationClickRouter` (the center delegate) decodes and routes. The
+  osascript dev fallback has no click hook — clicks open Script Editor.
+
 ## Future options (not built)
 
-- Click-through: `PlannedNotification.url` already carries the run's GitHub
-  page; a UNUserNotificationCenterDelegate could open it (or focus the
-  waiting agent's terminal via `TerminalFocus`) on click.
 - PR-level CI (`PullRequest.ci`) transitions — deliberately left out of v1
   to keep noise down; repo-level runs already cover deploys and pushes.
 - Configurable waiting threshold (hardcoded 5 min; `NotificationPlanner`

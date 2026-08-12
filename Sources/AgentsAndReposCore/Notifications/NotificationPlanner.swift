@@ -8,21 +8,33 @@ public struct PlannedNotification: Equatable, Sendable, Identifiable {
         case agentWaiting
     }
 
+    /// Where a click on the notification should land — mirroring what a click
+    /// on the corresponding dashboard tile does. Only the bundled app can
+    /// honor it (the osascript dev fallback has no click hook).
+    public enum ClickTarget: Equatable, Sendable {
+        /// Open in the browser (a run's GitHub page).
+        case url(String)
+        /// Focus the terminal window hosting the agent; reveal cwd in Finder
+        /// when no host window is found.
+        case agent(pid: Int32, cwd: String)
+    }
+
     /// Stable dedupe key ("run-…", "wait-…") — doubles as the
     /// UNNotificationRequest identifier.
     public let id: String
     public let kind: Kind
     public let title: String
     public let body: String
-    /// Where a click should land (the run's GitHub page); nil for agents.
-    public let url: String?
+    public let target: ClickTarget?
 
-    public init(id: String, kind: Kind, title: String, body: String, url: String? = nil) {
+    public init(
+        id: String, kind: Kind, title: String, body: String, target: ClickTarget? = nil
+    ) {
         self.id = id
         self.kind = kind
         self.title = title
         self.body = body
-        self.url = url
+        self.target = target
     }
 }
 
@@ -107,7 +119,7 @@ public struct NotificationPlanner: Sendable {
             kind: passed ? .actionPassed : .actionFailed,
             title: "\(run.workflowName) \(passed ? "passed" : "failed")",
             body: "\(repo.repo.name) · \(run.branch) — \(run.title)",
-            url: run.url.isEmpty ? nil : run.url)
+            target: run.url.isEmpty ? nil : .url(run.url))
     }
 
     // MARK: - Waiting agents
@@ -136,7 +148,8 @@ public struct NotificationPlanner: Sendable {
                     id: "wait-\(session.sessionId)",
                     kind: .agentWaiting,
                     title: "\(session.displayName) needs you",
-                    body: "\(place) — \(detail) for \(minutes)m"))
+                    body: "\(place) — \(detail) for \(minutes)m",
+                    target: .agent(pid: session.pid, cwd: session.cwd)))
         }
         // A session that stops waiting starts a fresh cycle if it waits again.
         waitingSince = waitingSince.filter { stillWaiting.contains($0.key) }

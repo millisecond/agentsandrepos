@@ -1,4 +1,5 @@
 import AgentsAndReposCore
+import AppKit
 import Foundation
 import UserNotifications
 import os
@@ -32,9 +33,17 @@ enum NotificationDeliverers {
 }
 
 /// The real thing: Notification Center via UserNotifications, with the
-/// system permission prompt on first enable.
+/// system permission prompt on first enable. Clicks route through
+/// `NotificationClickRouter` to the same destinations as the dashboard tiles.
 @MainActor
 final class UserNotificationDeliverer: NotificationDelivering {
+    /// Center delegate must be strongly held for the app's lifetime.
+    private let router = NotificationClickRouter()
+
+    init() {
+        UNUserNotificationCenter.current().delegate = router
+    }
+
     func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
             granted, error in
@@ -49,6 +58,7 @@ final class UserNotificationDeliverer: NotificationDelivering {
         content.title = note.title
         content.body = note.body
         content.sound = note.kind == .actionPassed ? nil : .default
+        content.userInfo = NotificationClickRouter.userInfo(for: note.target)
         let request = UNNotificationRequest(
             identifier: note.id, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
@@ -57,6 +67,70 @@ final class UserNotificationDeliverer: NotificationDelivering {
                     "UN add failed: \(String(describing: error), privacy: .public)")
             }
         }
+    }
+}
+
+/// Decodes a click target out of the notification's userInfo and sends the
+/// user where the matching dashboard tile click would: an agent's terminal
+/// window (Finder fallback) or a run's GitHub page.
+final class NotificationClickRouter: NSObject, UNUserNotificationCenterDelegate {
+    static func userInfo(for target: PlannedNotification.ClickTarget?) -> [AnyHashable: Any] {
+        switch target {
+        case .url(let url):
+            return ["target": "url", "url": url]
+        case .agent(let pid, let cwd):
+            return ["target": "agent", "pid": Int(pid), "cwd": cwd]
+        case nil:
+            return [:]
+        }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        // Only the plain click/default action navigates; a swipe-dismiss doesn't.
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else {
+            completionHandler()
+            return
+        }
+        let info = response.notification.request.content.userInfo
+        let kind = info["target"] as? String
+        let url = info["url"] as? String
+        let pid = info["pid"] as? Int
+        let cwd = info["cwd"] as? String
+        Task { @MainActor in
+            switch kind {
+            case "url":
+                if let url, let parsed = URL(string: url) {
+                    notifyLog.info("click → \(url, privacy: .public)")
+                    NSWorkspace.shared.open(parsed)
+                }
+            case "agent":
+                if let pid, let cwd {
+                    notifyLog.info("click → agent pid \(pid)")
+                    if !TerminalFocus.focus(agentPid: Int32(pid), cwd: cwd) {
+                        NSWorkspace.shared.open(
+                            URL(fileURLWithPath: cwd, isDirectory: true))
+                    }
+                }
+            default:
+                break
+            }
+        }
+        completionHandler()
+    }
+
+    /// Show banners even while the app is "frontmost" (popover open) —
+    /// otherwise macOS suppresses them exactly when the user is looking.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler:
+            @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }
 
