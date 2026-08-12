@@ -72,9 +72,10 @@ final class RankedTileTests: XCTestCase {
     }
 
     func testPRsInterleaveWithRepos() {
-        // Failing PR (urgent 100 + recent 50) > its host repo (urgent via
-        // worstCI, no activity date) > dirty repo (info 30 + recent 50) >
-        // passing PR (ok 10 + 35).
+        // Failing PR (urgent 100 + recent 50) > dirty repo (info 30 + recent
+        // 50) > passing PR (ok 10 + 35) > host repo (ok 10, no activity) —
+        // the failing PR paints only its own row; the clean host repo ranks
+        // on its local state.
         var snap = Snapshot.empty
         snap.repos = [
             repo(
@@ -84,7 +85,7 @@ final class RankedTileTests: XCTestCase {
                 prs: [pr(.fail, number: 1, updatedAgo: 60), pr(.pass, number: 2, updatedAgo: 1800)]),
         ]
         let names = snap.rankedTiles(now: now).map(\.sortName)
-        XCTAssertEqual(names, ["host #1", "host", "dirty", "host #2"])
+        XCTAssertEqual(names, ["host #1", "dirty", "host #2", "host"])
     }
 
     func testQuietUnreachableReposLumpOutOfRankedList() {

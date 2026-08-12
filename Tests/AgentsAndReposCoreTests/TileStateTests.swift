@@ -18,11 +18,12 @@ final class TileStateTests: XCTestCase {
     private func repo(
         name: String = "repo", git: GitState? = GitState(branch: "main"),
         agents: [AgentSession] = [], prs: [PullRequest] = [],
-        worktrees: [WorktreeOverview] = [], runs: [WorkflowRun] = []
+        worktrees: [WorktreeOverview] = [], runs: [WorkflowRun] = [],
+        github: String? = nil
     ) -> RepoOverview {
         RepoOverview(
             repo: Repo(path: "/p/\(name)", name: name, root: "/p"),
-            git: git, agents: agents, prs: prs, worktrees: worktrees, githubRepo: nil,
+            git: git, agents: agents, prs: prs, worktrees: worktrees, githubRepo: github,
             runs: runs)
     }
 
@@ -156,10 +157,11 @@ final class TileStateTests: XCTestCase {
     // MARK: - Repo tiles
 
     func testRepoSeverityPrecedence() {
-        // CI fail beats everything.
+        // A failing PR reddens its own PR tile, not the host repo's row —
+        // the repo ranks on its local state alone.
         XCTAssertEqual(
             RepoTileState(repo: repo(git: GitState(branch: "m", dirty: 3), prs: [pr(.fail)])).severity,
-            .urgent)
+            .info)
         // Status error (local git breakage) is urgent.
         XCTAssertEqual(
             RepoTileState(repo: repo(git: GitState(branch: "m", statusError: "boom"))).severity,
@@ -212,17 +214,16 @@ final class TileStateTests: XCTestCase {
         XCTAssertTrue(RepoTileState(repo: repo(runs: [run(.running)])).problems.isEmpty)
     }
 
-    func testWaitingAgentAndFailingPRAreProblems() {
+    func testFailingPRIsNotARepoProblem() {
+        // The PR's own tile carries the failure; the repo row stays scoped
+        // to repo-level facts (here: the waiting agent).
         let tile = RepoTileState(
             repo: repo(agents: [agent(.waiting(nil))], prs: [pr(.fail)]))
-        XCTAssertEqual(
-            tile.problems.map(\.label), ["PR #1 checks failing", "agent waiting on input"])
-        // The failing-PR problem deep-links to the PR itself.
-        XCTAssertEqual(tile.problems[0].url, "u")
-        XCTAssertEqual(tile.problems[0].detail, "t")
-        XCTAssertEqual(tile.problems[0].severity, .urgent)
-        XCTAssertEqual(tile.problems[1].severity, .attention)
-        XCTAssertNil(tile.problems[1].url)
+        XCTAssertEqual(tile.problems.map(\.label), ["agent waiting on input"])
+        XCTAssertEqual(tile.problems[0].severity, .attention)
+        XCTAssertNil(tile.problems[0].url)
+        // The rolled-up CI still feeds the corner indicator.
+        XCTAssertEqual(tile.worstCI, .fail)
     }
 
     func testQuietUnreachableDetection() {
@@ -255,6 +256,37 @@ final class TileStateTests: XCTestCase {
         ]
         XCTAssertEqual(snap.prTiles.count, 1)
         XCTAssertEqual(snap.prTiles[0].repoName, "clone-a")
+    }
+
+    func testClonesSharingARemoteShowTheirDirectory() {
+        // Two clones of one GitHub repo carry identical PR/run data; each
+        // gets its checkout path stamped so the rows stay tellable apart.
+        // Slug comparison is case-insensitive, like GitHub's.
+        var snap = Snapshot.empty
+        snap.repos = [
+            repo(name: "csc-bandit", github: "CSC-R-D/csc-bandit"),
+            repo(name: "csc-bandit-old", github: "csc-r-d/csc-bandit"),
+            repo(name: "solo", github: "o/solo"),
+            repo(name: "local-only-a"),
+            repo(name: "local-only-b"),
+        ]
+        let byName = Dictionary(uniqueKeysWithValues: snap.repoTiles.map { ($0.name, $0) })
+        XCTAssertEqual(byName["csc-bandit"]?.sharedRemotePath, "/p/csc-bandit")
+        XCTAssertEqual(byName["csc-bandit-old"]?.sharedRemotePath, "/p/csc-bandit-old")
+        // A unique remote — and repos with no remote at all — stay unmarked.
+        XCTAssertNil(byName["solo"]?.sharedRemotePath ?? nil)
+        XCTAssertNil(byName["local-only-a"]?.sharedRemotePath ?? nil)
+        XCTAssertNil(byName["local-only-b"]?.sharedRemotePath ?? nil)
+    }
+
+    func testIgnoredCloneDoesNotMarkItsVisibleTwin() {
+        var snap = Snapshot.empty
+        snap.repos = [
+            repo(name: "clone-a", github: "o/r"),
+            repo(name: "clone-b", github: "o/r"),
+        ]
+        snap.config.ignoredRepos = ["/p/clone-b"]
+        XCTAssertNil(snap.repoTiles.first?.sharedRemotePath ?? nil)
     }
 
     func testWorkflowRunSeverity() {
@@ -423,7 +455,9 @@ final class TileStateTests: XCTestCase {
         let wtTile = RepoTileState(worktree: wt, parent: overview)
         XCTAssertEqual(wtTile.prCount, 1)
         XCTAssertEqual(wtTile.worstCI, .fail)
-        XCTAssertEqual(wtTile.severity, .urgent)
+        // Even on the worktree hosting the PR's branch, the failure paints
+        // the PR tile, not the checkout's row.
+        XCTAssertNotEqual(wtTile.severity, .urgent)
     }
 
     func testIgnoredWorktreeHidesAndJoinsHiddenList() {

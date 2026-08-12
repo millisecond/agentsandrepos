@@ -66,6 +66,26 @@ struct DestinationHint: View {
     }
 }
 
+/// The checkout's directory path, shown only when another listed repo shares
+/// the same GitHub remote — two clones of one repo carry identical PR/run
+/// data, so each row names which local folder it is.
+struct SharedRemoteDirText: View {
+    let dir: String
+    let githubRepo: String?
+
+    var body: some View {
+        Text(dir)
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .truncationMode(.head)
+            .help(
+                "Another listed repo has the same GitHub remote"
+                    + (githubRepo.map { " (\($0))" } ?? "")
+                    + " — this row is the checkout at \(dir)")
+    }
+}
+
 /// "5m ago"-style stamp for a row's trailing edge.
 private struct AgoText: View {
     let date: Date?
@@ -173,6 +193,9 @@ private struct RepoRowView: View {
                         PruneableBadge(help: reason)
                     } else if let merge = state.mergeState {
                         MergeStateBadge(state: merge)
+                    }
+                    if let dir = state.sharedRemotePath {
+                        SharedRemoteDirText(dir: dir, githubRepo: state.githubRepo)
                     }
                 }
                 problemsLine

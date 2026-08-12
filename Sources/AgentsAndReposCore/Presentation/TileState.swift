@@ -79,6 +79,12 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     /// True when this tile is a linked worktree rather than the main repo.
     public let isWorktree: Bool
     public let isClaudeManaged: Bool
+    /// Abbreviated directory path ("~/Projects/csc-bandit-old"), set only
+    /// when another visible repo resolves to the same GitHub remote — two
+    /// clones of one repo show identical PR/run data, so each row names its
+    /// checkout to keep them tellable apart. Nil in the normal case.
+    /// Assigned by `Snapshot.repoTiles`, which sees all repos at once.
+    public var sharedRemotePath: String?
 
     public let severity: TileSeverity
     /// Local git breakage (`git status` itself failing) — genuinely urgent.
@@ -110,10 +116,9 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     public let agentTasks: [String]
 
     public let prCount: Int
+    /// Rolled-up PR CI for the corner indicator only — a failing PR paints
+    /// its own PR tile red, never this tile (see `severity`).
     public let worstCI: PullRequest.CIStatus
-    /// The first CI-failing PR on this tile's branch(es) — number, title,
-    /// failing check names, and where to act on it.
-    public let failingPR: FailingPRRef?
 
     /// Recent repo-level workflow runs (deploys, dispatches). Worktree tiles
     /// never carry these — runs belong to the repo, not a checkout.
@@ -162,7 +167,6 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         let prs = r.prs.filter { !wtBranches.contains($0.headRefName) }
         self.prCount = prs.count
         self.worstCI = Self.worstCI(of: prs)
-        self.failingPR = Self.failingPR(of: prs)
 
         self.runs = r.runs
         self.worstRun = WorkflowRun.worstState(of: r.runs)
@@ -174,7 +178,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         }
 
         self.severity = Self.severity(
-            hasError: hasError, worstCI: worstCI, worstRun: worstRun, git: git,
+            hasError: hasError, worstRun: worstRun, git: git,
             agentDots: agentDots, unreachable: unreachable)
     }
 
@@ -210,7 +214,6 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         let prs = r.prs.filter { $0.headRefName == branchName }
         self.prCount = prs.count
         self.worstCI = Self.worstCI(of: prs)
-        self.failingPR = Self.failingPR(of: prs)
 
         self.runs = []
         self.worstRun = nil
@@ -224,12 +227,14 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         self.severity = wt.worktree.prunable
             ? .muted
             : Self.severity(
-                hasError: hasError, worstCI: worstCI, worstRun: nil, git: git,
+                hasError: hasError, worstRun: nil, git: git,
                 agentDots: agentDots, unreachable: unreachable)
     }
 
     /// Actual failures needing a human, worst first — each with the URL where
-    /// it can be acted on (the failing PR, the failed run) when one exists.
+    /// it can be acted on (the failed run) when one exists. Failing PR checks
+    /// are deliberately absent: that failure is scoped to the PR and its own
+    /// tile already shows it red — repeating it here painted two rows red.
     /// Distinct from `stateInfo`: dirty files are normal work, not a problem.
     public var problems: [RepoProblem] {
         var list: [RepoProblem] = []
@@ -249,15 +254,6 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
                     detail: "\(run.title) · \(run.branch)",
                     url: run.url, severity: .urgent, date: run.updatedAt))
         }
-        if let fp = failingPR {
-            let detail = fp.checks.isEmpty
-                ? fp.title
-                : "\(fp.checks.joined(separator: ", ")) — \(fp.title)"
-            list.append(
-                RepoProblem(
-                    label: "PR #\(fp.number) checks failing",
-                    detail: detail, url: fp.url, severity: .urgent))
-        }
         if agentDots.contains(.attention) {
             list.append(
                 RepoProblem(
@@ -265,12 +261,6 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
                     agentPid: waitingAgentPid, severity: .attention))
         }
         return list
-    }
-
-    static func failingPR(of prs: [PullRequest]) -> FailingPRRef? {
-        prs.first { $0.ci == .fail }.map {
-            FailingPRRef(number: $0.number, title: $0.title, url: $0.url, checks: $0.failingChecks)
-        }
     }
 
     /// Why this worktree is done and safe to remove — nil when it isn't.
@@ -313,7 +303,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     /// personal repos and vice versa).
     public var isQuietUnreachable: Bool {
         unreachable && !hasError && dirty == 0 && untracked == 0 && ahead == 0
-            && behind == 0 && worstCI != .fail && worstRun != .failed
+            && behind == 0 && worstRun != .failed
             && !agentDots.contains(.attention)
     }
 
@@ -363,7 +353,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         return worst
     }
 
-    /// Precedence: CI/run-fail or status error → urgent > waiting agent →
+    /// Precedence: run-fail or status error → urgent > waiting agent →
     /// attention > any in-flight work (dirty/untracked/ahead/behind, busy
     /// agent, running action) → info > clean → ok > no git or
     /// unreachable-remote → muted.
@@ -372,11 +362,14 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     /// normal state of an active repo, and painting it orange trains the eye
     /// to ignore orange. Attention means a human is being waited on; urgent
     /// means something failed. A fetch error alone never raises severity.
+    /// Failing PR checks don't raise it either — that failure belongs to the
+    /// PR's own tile; repo-level urgency is for repo-scoped failures (a
+    /// failed workflow run, broken git status).
     static func severity(
-        hasError: Bool, worstCI: PullRequest.CIStatus, worstRun: WorkflowRun.State?,
+        hasError: Bool, worstRun: WorkflowRun.State?,
         git: GitState?, agentDots: [TileSeverity], unreachable: Bool = false
     ) -> TileSeverity {
-        if hasError || worstCI == .fail || worstRun == .failed { return .urgent }
+        if hasError || worstRun == .failed { return .urgent }
         guard let git else { return .muted }
         if agentDots.contains(.attention) { return .attention }
         if !git.isClean || git.ahead > 0 || git.behind > 0
@@ -411,21 +404,6 @@ public struct RepoProblem: Sendable, Equatable {
         self.agentPid = agentPid
         self.severity = severity
         self.date = date
-    }
-}
-
-/// A CI-failing PR as referenced from a repo tile's problem line.
-public struct FailingPRRef: Sendable, Equatable {
-    public let number: Int
-    public let title: String
-    public let url: String
-    public let checks: [String]
-
-    public init(number: Int, title: String, url: String, checks: [String]) {
-        self.number = number
-        self.title = title
-        self.url = url
-        self.checks = checks
     }
 }
 
@@ -640,9 +618,22 @@ extension Snapshot {
 
     /// Top-level repo tiles: most recently touched first, then alphabetical.
     /// Ignored repos are excluded — they live in `ignoredRepoTiles`. Worktrees
-    /// have their own list, `worktreeTiles`.
+    /// have their own list, `worktreeTiles`. Clones sharing a GitHub remote
+    /// get `sharedRemotePath` stamped so the UI can disambiguate them.
     public var repoTiles: [RepoTileState] {
-        visibleRepos.map(RepoTileState.init(repo:)).sorted(by: Self.recencyOrder)
+        var tiles = visibleRepos.map(RepoTileState.init(repo:))
+        var clonesPerRemote: [String: Int] = [:]
+        for tile in tiles {
+            guard let slug = tile.githubRepo?.lowercased() else { continue }
+            clonesPerRemote[slug, default: 0] += 1
+        }
+        for i in tiles.indices {
+            guard let slug = tiles[i].githubRepo?.lowercased(),
+                clonesPerRemote[slug, default: 0] > 1
+            else { continue }
+            tiles[i].sharedRemotePath = Self.abbreviatePath(tiles[i].path)
+        }
+        return tiles.sorted(by: Self.recencyOrder)
     }
 
     /// Worktree tiles of visible repos, same ordering as repo tiles.

@@ -35,6 +35,9 @@ struct RepoTileView: View {
                         MergeStateBadge(state: merge)
                     }
                 }
+                if let dir = state.sharedRemotePath {
+                    SharedRemoteDirText(dir: dir, githubRepo: state.githubRepo)
+                }
                 if !state.runs.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(state.runs) { run in
