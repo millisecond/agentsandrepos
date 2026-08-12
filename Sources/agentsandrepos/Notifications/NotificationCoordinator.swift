@@ -18,6 +18,18 @@ final class NotificationCoordinator {
         deliverer.requestAuthorization()
     }
 
+    /// Settings' "Send Test Notification": exercises the deliverer directly,
+    /// bypassing the planner and the enabled gate, so delivery/permission
+    /// problems can be diagnosed independently of real triggers.
+    func sendTest() {
+        deliverer.deliver(
+            PlannedNotification(
+                id: "test-\(UUID().uuidString)",
+                kind: .agentWaiting,
+                title: "Test notification",
+                body: "Delivery from Agents & Repos is working."))
+    }
+
     func ingest(_ snapshot: Snapshot) {
         guard snapshot.config.notificationsEnabled else {
             // Drop state so re-enabling re-primes instead of replaying every

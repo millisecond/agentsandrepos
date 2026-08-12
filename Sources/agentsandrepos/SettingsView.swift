@@ -6,11 +6,17 @@ struct SettingsView: View {
     @State private var config: AppConfig
     @State private var launchAtLogin = LaunchAtLogin.isAvailable && LaunchAtLogin.isEnabled
     @ObservedObject var summaries: SummaryService
+    let onTestNotification: () -> Void
     let onSave: (AppConfig) -> Void
 
-    init(config: AppConfig, summaries: SummaryService, onSave: @escaping (AppConfig) -> Void) {
+    init(
+        config: AppConfig, summaries: SummaryService,
+        onTestNotification: @escaping () -> Void = {},
+        onSave: @escaping (AppConfig) -> Void
+    ) {
         _config = State(initialValue: config)
         self.summaries = summaries
+        self.onTestNotification = onTestNotification
         self.onSave = onSave
     }
 
@@ -85,6 +91,7 @@ struct SettingsView: View {
                 Text("Delivered locally via macOS Notification Center — nothing leaves this Mac. Sound and banner style are managed in System Settings → Notifications.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Button("Send Test Notification") { onTestNotification() }
             }
 
             Section("GitHub Pull Requests") {

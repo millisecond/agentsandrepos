@@ -7,15 +7,22 @@ final class SettingsWindowController {
     private var window: NSWindow?
     private let summaries: SummaryService
     private let onSave: (AppConfig) -> Void
+    private let onTestNotification: () -> Void
 
-    init(summaries: SummaryService, onSave: @escaping (AppConfig) -> Void) {
+    init(
+        summaries: SummaryService, onTestNotification: @escaping () -> Void = {},
+        onSave: @escaping (AppConfig) -> Void
+    ) {
         self.summaries = summaries
+        self.onTestNotification = onTestNotification
         self.onSave = onSave
     }
 
     func show(config: AppConfig) {
         let hosting = NSHostingController(
-            rootView: SettingsView(config: config, summaries: summaries, onSave: onSave))
+            rootView: SettingsView(
+                config: config, summaries: summaries,
+                onTestNotification: onTestNotification, onSave: onSave))
         if let window {
             window.contentViewController = hosting
         } else {

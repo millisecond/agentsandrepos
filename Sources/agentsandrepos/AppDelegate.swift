@@ -152,7 +152,10 @@ extension AppDelegate: MenuActionDelegate {
 
     func openSettings() {
         if settingsController == nil {
-            settingsController = SettingsWindowController(summaries: summaryService) {
+            settingsController = SettingsWindowController(
+                summaries: summaryService,
+                onTestNotification: { [weak self] in self?.notifications?.sendTest() }
+            ) {
                 [weak self] newConfig in
                 guard let self else { return }
                 if newConfig.notificationsEnabled {
