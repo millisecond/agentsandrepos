@@ -52,6 +52,11 @@ struct DashboardView: View {
                         if let version = updates.availableVersion {
                             UpdateBanner(version: version, actions: actions)
                         }
+                        if !DemoMode.enabled,
+                            NotificationPrompt.shouldShow(config: snap.config, now: Date())
+                        {
+                            NotificationPromptBanner(actions: actions)
+                        }
                         if DevMode.showRowGallery {
                             DevRowGalleryView(actions: actions)
                         }

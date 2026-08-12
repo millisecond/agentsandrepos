@@ -74,6 +74,19 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Notifications") {
+                Toggle("Enable local notifications", isOn: $config.notificationsEnabled)
+                if config.notificationsEnabled {
+                    Toggle("Git builds/actions finish", isOn: $config.notifyGitActions)
+                    Toggle(
+                        "Agent waiting on you for over 5 minutes",
+                        isOn: $config.notifyWaitingAgents)
+                }
+                Text("Delivered locally via macOS Notification Center — nothing leaves this Mac. Sound and banner style are managed in System Settings → Notifications.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("GitHub Pull Requests") {
                 Picker("Show", selection: $config.prScope) {
                     Text("My PRs").tag(PRScope.mine)

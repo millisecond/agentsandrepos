@@ -9,6 +9,11 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.prScope, .mine)
         XCTAssertFalse(c.autoFastForward)
         XCTAssertTrue(c.fetchEnabled)
+        XCTAssertFalse(c.notificationsEnabled)
+        XCTAssertTrue(c.notifyGitActions)
+        XCTAssertTrue(c.notifyWaitingAgents)
+        XCTAssertFalse(c.notificationsPromptDismissed)
+        XCTAssertNil(c.notificationsPromptFirstShownAt)
     }
 
     func testLenientDecodeEmptyObject() throws {
@@ -34,6 +39,10 @@ final class ConfigTests: XCTestCase {
         c.ignoredRepos = ["/p/hidden"]
         c.ignoredAgents = ["session-1"]
         c.expandedSections = ["repos"]
+        c.notificationsEnabled = true
+        c.notifyGitActions = false
+        c.notificationsPromptDismissed = true
+        c.notificationsPromptFirstShownAt = Date(timeIntervalSince1970: 1_700_000_000)
         let data = try JSONEncoder().encode(c)
         let back = try JSONDecoder().decode(AppConfig.self, from: data)
         XCTAssertEqual(back, c)

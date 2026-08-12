@@ -34,6 +34,20 @@ public struct AppConfig: Codable, Sendable, Equatable {
     /// On-device LLM one-liners on tiles (Apple Intelligence). On by default;
     /// ignored when the OS/model can't provide them.
     public var showLLMSummaries: Bool = true
+    /// Local (macOS Notification Center) alerts. Off by default; the dashboard
+    /// offers a one-time prompt to turn them on.
+    public var notificationsEnabled: Bool = false
+    /// Notify when a repo-level GitHub Actions run finishes (pass or fail).
+    /// Only consulted while `notificationsEnabled`.
+    public var notifyGitActions: Bool = true
+    /// Notify when an agent has been waiting on the user (permission request,
+    /// question) past the threshold. Only consulted while `notificationsEnabled`.
+    public var notifyWaitingAgents: Bool = true
+    /// The user clicked Dismiss on the enable-notifications prompt.
+    public var notificationsPromptDismissed: Bool = false
+    /// When the enable-notifications prompt first appeared on screen; it
+    /// auto-dismisses a day later (`NotificationPrompt.autoDismissAfter`).
+    public var notificationsPromptFirstShownAt: Date? = nil
 
     public init() {}
 
@@ -45,6 +59,8 @@ public struct AppConfig: Codable, Sendable, Equatable {
         case schemaVersion, roots, scanDepth, fetchEnabled, fetchIntervalMinutes
         case autoFastForward, prScope, prIntervalMinutes, statusIntervalSeconds
         case ignoredRepos, ignoredAgents, expandedSections, showLLMSummaries
+        case notificationsEnabled, notifyGitActions, notifyWaitingAgents
+        case notificationsPromptDismissed, notificationsPromptFirstShownAt
     }
 
     // Lenient decoding: any missing/invalid key falls back to its default.
@@ -64,5 +80,10 @@ public struct AppConfig: Codable, Sendable, Equatable {
         ignoredAgents = (try? c.decodeIfPresent([String].self, forKey: .ignoredAgents)) ?? d.ignoredAgents
         expandedSections = (try? c.decodeIfPresent([String].self, forKey: .expandedSections)) ?? d.expandedSections
         showLLMSummaries = (try? c.decodeIfPresent(Bool.self, forKey: .showLLMSummaries)) ?? d.showLLMSummaries
+        notificationsEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled)) ?? d.notificationsEnabled
+        notifyGitActions = (try? c.decodeIfPresent(Bool.self, forKey: .notifyGitActions)) ?? d.notifyGitActions
+        notifyWaitingAgents = (try? c.decodeIfPresent(Bool.self, forKey: .notifyWaitingAgents)) ?? d.notifyWaitingAgents
+        notificationsPromptDismissed = (try? c.decodeIfPresent(Bool.self, forKey: .notificationsPromptDismissed)) ?? d.notificationsPromptDismissed
+        notificationsPromptFirstShownAt = (try? c.decodeIfPresent(Date.self, forKey: .notificationsPromptFirstShownAt)) ?? d.notificationsPromptFirstShownAt
     }
 }

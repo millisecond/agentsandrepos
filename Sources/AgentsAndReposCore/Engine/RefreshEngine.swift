@@ -289,6 +289,33 @@ public actor RefreshEngine {
         publish()
     }
 
+    public func setNotificationsEnabled(_ enabled: Bool) {
+        var c = config
+        c.notificationsEnabled = enabled
+        config = c
+        ConfigStore.save(c)
+        publish()
+    }
+
+    public func dismissNotificationsPrompt() {
+        var c = config
+        c.notificationsPromptDismissed = true
+        config = c
+        ConfigStore.save(c)
+        publish()
+    }
+
+    /// Stamps when the enable-notifications banner first hit the screen (the
+    /// banner's onAppear calls this); the 1-day auto-dismiss counts from here.
+    public func noteNotificationsPromptShown(at date: Date = Date()) {
+        guard config.notificationsPromptFirstShownAt == nil else { return }
+        var c = config
+        c.notificationsPromptFirstShownAt = date
+        config = c
+        ConfigStore.save(c)
+        publish()
+    }
+
     public func setAgentIgnored(sessionId: String, ignored: Bool) {
         var c = config
         c.ignoredAgents.removeAll { $0 == sessionId }

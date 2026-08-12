@@ -11,6 +11,9 @@ protocol MenuActionDelegate: AnyObject {
     func setRepoIgnored(path: String, ignored: Bool)
     func setAgentIgnored(sessionId: String, ignored: Bool)
     func setSectionExpanded(section: DashboardSection, expanded: Bool)
+    func setNotificationsEnabled(_ enabled: Bool)
+    func dismissNotificationsPrompt()
+    func noteNotificationsPromptShown()
     func openSettings()
 }
 
@@ -27,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let summaryService = SummaryService()
     private let updateChecker = UpdateChecker()
     private let perfMonitor = PerfMonitor()
+    private var notifications: NotificationCoordinator?
     private var popoverController: DashboardPopoverController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -52,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         updateChecker.start()
         perfMonitor.start()
+        notifications = NotificationCoordinator()
 
         let engine = RefreshEngine(config: config) { [weak self] snap in
             Task { @MainActor in
@@ -60,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.store.update(snap)
                 self.statusController.update(snapshot: snap)
                 self.summaryService.update(snapshot: snap)
+                self.notifications?.ingest(snap)
             }
         }
         self.engine = engine
@@ -128,11 +134,30 @@ extension AppDelegate: MenuActionDelegate {
         Task { await engine.setSectionExpanded(section, expanded: expanded) }
     }
 
+    func setNotificationsEnabled(_ enabled: Bool) {
+        guard let engine else { return }
+        if enabled { notifications?.requestAuthorization() }
+        Task { await engine.setNotificationsEnabled(enabled) }
+    }
+
+    func dismissNotificationsPrompt() {
+        guard let engine else { return }
+        Task { await engine.dismissNotificationsPrompt() }
+    }
+
+    func noteNotificationsPromptShown() {
+        guard let engine else { return }
+        Task { await engine.noteNotificationsPromptShown() }
+    }
+
     func openSettings() {
         if settingsController == nil {
             settingsController = SettingsWindowController(summaries: summaryService) {
                 [weak self] newConfig in
                 guard let self else { return }
+                if newConfig.notificationsEnabled {
+                    self.notifications?.requestAuthorization()
+                }
                 if let engine = self.engine {
                     Task { await engine.updateConfig(newConfig) }
                 }
