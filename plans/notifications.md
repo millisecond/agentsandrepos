@@ -23,6 +23,18 @@ Status: implemented on `notifications-exploration` (default off, opt-in).
   - Both respect `ignoredRepos` / `ignoredAgents`.
 - **Settings**: master toggle plus per-trigger toggles; works regardless of
   what happened to the banner.
+- **Alert style with timed auto-hide**: `NSUserNotificationAlertStyle=alert`
+  defaults the app to persistent Alerts (user-overridable in System
+  Settings; macOS snapshots the style at first registration, so a machine
+  that already registered as Banners needs its entry reset to pick it up).
+  Because Alerts never self-dismiss, the app withdraws its own: CI results
+  after 5 minutes, waiting-agent alerts after 1 minute
+  (`PlannedNotification.expiresAfter`, scheduled by the coordinator with a
+  generation guard so re-posts aren't killed by stale timers). Resolution
+  also withdraws — an agent that stops waiting or a run that gets re-run
+  takes its alert down immediately (`NotificationPlan.withdraw`).
+  Withdrawal removes the Notification Center entry too; macOS has no
+  screen-only dismissal.
 
 ## Architecture
 

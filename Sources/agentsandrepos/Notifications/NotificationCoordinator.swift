@@ -9,6 +9,10 @@ final class NotificationCoordinator {
     private var planner = NotificationPlanner()
     private let deliverer: NotificationDelivering
     private var wasEnabled = false
+    /// Bumped per post of an id; a scheduled expiry only withdraws if its
+    /// generation still matches, so a re-posted alert (agent waited again)
+    /// isn't taken down by the previous cycle's timer.
+    private var postGeneration: [String: Int] = [:]
 
     init(deliverer: NotificationDelivering? = nil) {
         self.deliverer = deliverer ?? NotificationDeliverers.make()
@@ -41,8 +45,26 @@ final class NotificationCoordinator {
             return
         }
         wasEnabled = true
-        for note in planner.ingest(snapshot, now: Date()) {
+        let plan = planner.ingest(snapshot, now: Date())
+        deliverer.withdraw(plan.withdraw)
+        for id in plan.withdraw { postGeneration[id] = nil }
+        for note in plan.post {
             deliverer.deliver(note)
+            scheduleExpiry(of: note)
+        }
+    }
+
+    /// Alerts persist until acted on (NSUserNotificationAlertStyle); the
+    /// expiry takes an ignored one down after its window.
+    private func scheduleExpiry(of note: PlannedNotification) {
+        guard let ttl = note.expiresAfter else { return }
+        let generation = (postGeneration[note.id] ?? 0) + 1
+        postGeneration[note.id] = generation
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(ttl))
+            guard let self, self.postGeneration[note.id] == generation else { return }
+            self.postGeneration[note.id] = nil
+            self.deliverer.withdraw([note.id])
         }
     }
 }

@@ -12,6 +12,9 @@ import os
 protocol NotificationDelivering: AnyObject {
     func requestAuthorization()
     func deliver(_ note: PlannedNotification)
+    /// Take down delivered notifications: clears the on-screen alert AND the
+    /// Notification Center entry (macOS offers no screen-only dismissal).
+    func withdraw(_ ids: [String])
 }
 
 let notifyLog = Logger(
@@ -42,6 +45,10 @@ final class UserNotificationDeliverer: NotificationDelivering {
 
     init() {
         UNUserNotificationCenter.current().delegate = router
+        UNUserNotificationCenter.current().getNotificationSettings { s in
+            notifyLog.info(
+                "settings: auth=\(s.authorizationStatus.rawValue) alertSetting=\(s.alertSetting.rawValue) style=\(s.alertStyle.rawValue)")
+        }
     }
 
     func requestAuthorization() {
@@ -67,6 +74,13 @@ final class UserNotificationDeliverer: NotificationDelivering {
                     "UN add failed: \(String(describing: error), privacy: .public)")
             }
         }
+    }
+
+    func withdraw(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        notifyLog.info("withdraw: \(ids.joined(separator: ", "), privacy: .public)")
+        UNUserNotificationCenter.current()
+            .removeDeliveredNotifications(withIdentifiers: ids)
     }
 }
 
@@ -140,6 +154,9 @@ final class NotificationClickRouter: NSObject, UNUserNotificationCenterDelegate 
 @MainActor
 final class OsascriptNotificationDeliverer: NotificationDelivering {
     func requestAuthorization() {}
+
+    /// Fire-and-forget: osascript notifications can't be taken back.
+    func withdraw(_ ids: [String]) {}
 
     func deliver(_ note: PlannedNotification) {
         notifyLog.info("deliver (osascript): \(note.id, privacy: .public)")
