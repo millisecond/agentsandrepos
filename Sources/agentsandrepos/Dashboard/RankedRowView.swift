@@ -252,15 +252,13 @@ private struct RepoRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Only worktree rows spin: a worktree IS the branch the CI is
-            // running for, so the motion points at the action. A plain repo
-            // row's click lands in Finder, where nothing is active.
+            // Repo and worktree rows never spin, even when the branch's PR
+            // has CI running: the PR row already carries that spinner, and
+            // these rows click into the local checkout — motion here would
+            // promise activity the click can't reach.
             RowKindIcon(
                 kind: state.isWorktree ? .worktree : .repo,
-                color: Color(severity: state.severity),
-                spinning: state.isWorktree
-                    && (state.worstCI == .pending
-                        || state.runs.contains { $0.state == .running }))
+                color: Color(severity: state.severity))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     CopyHoverText(
