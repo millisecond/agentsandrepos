@@ -19,29 +19,129 @@ struct RankedRowView: View {
     }
 }
 
+/// Which family a row belongs to. Agent rows get heavier chrome (a solid
+/// leading accent bar, stronger wash and stroke) so the top section reads
+/// as "live things" and the ranked feed below as "things to look at" even
+/// when both carry the same severity color.
+enum RowChromeStyle {
+    case ranked
+    case agent
+}
+
 /// Shared row chrome: severity-tinted rounded border, hover tracking.
 struct RowChrome: ViewModifier {
     let severity: TileSeverity
+    /// Overrides the severity-derived chrome color (e.g. an agent shell
+    /// phase's teal, which has no TileSeverity of its own).
+    var tint: Color? = nil
+    var style: RowChromeStyle = .ranked
 
     func body(content: Content) -> some View {
+        let color = tint ?? Color(severity: severity)
+        let muted = tint == nil && severity == .muted
+        let agent = style == .agent
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         content
             .padding(.horizontal, 9)
-            .padding(.vertical, 9)
+            .padding(.leading, agent ? 4 : 0)
+            // Agent rows run tighter: the wide layout already carries two
+            // summary lines, so tall padding just spreads the live section.
+            .padding(.vertical, agent ? 6 : 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(severity: severity).opacity(severity == .muted ? 0.04 : 0.09))
-            )
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(.quaternary.opacity(0.35))
-            )
+            .background(shape.fill(color.opacity(muted ? 0.04 : agent ? 0.13 : 0.09)))
+            .background(shape.fill(.quaternary.opacity(0.35)))
+            .overlay(alignment: .leading) {
+                if agent {
+                    color.opacity(muted ? 0.5 : 0.9).frame(width: 4)
+                }
+            }
+            .clipShape(shape)
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(
-                        Color(severity: severity).opacity(severity == .muted ? 0.25 : 0.55),
-                        lineWidth: 1.5)
+                shape.strokeBorder(
+                    color.opacity(muted ? 0.25 : agent ? 0.7 : 0.55),
+                    lineWidth: 1.5)
             )
+    }
+}
+
+/// What kind of thing a ranked row is, told apart by the *shape* around the
+/// leading glyph rather than by color (color is spent on severity): a bare
+/// folder for a repo, a rounded square for a worktree, a circle for a PR.
+enum RowKind {
+    case repo
+    case worktree
+    case pr
+
+    var symbol: String {
+        switch self {
+        case .repo: return "folder"
+        case .worktree: return "arrow.triangle.branch"
+        case .pr: return "arrow.triangle.pull"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .repo: return "Repository"
+        case .worktree: return "Linked worktree"
+        case .pr: return "Pull request"
+        }
+    }
+}
+
+struct RowKindIcon: View {
+    let kind: RowKind
+    let color: Color
+    /// CI or a workflow run is in flight on this row: the outline itself
+    /// becomes the spinner (a teal segment orbiting the kind shape). Repos
+    /// draw a bare folder — no outline to spin — so only worktree squares
+    /// and PR circles animate.
+    var spinning = false
+    @Environment(\.dashboardLive) private var live
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            switch kind {
+            case .repo:
+                Image(systemName: kind.symbol)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(color)
+            case .worktree:
+                Image(systemName: kind.symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 20, height: 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(color.opacity(0.16)))
+                    .overlay(outline(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous),
+                        perimeter: 70))
+            case .pr:
+                Image(systemName: kind.symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(color.opacity(0.16)))
+                    .overlay(outline(Circle(), perimeter: 60))
+            }
+        }
+        .frame(width: 20)
+        .help(spinning ? "\(kind.help) — CI running" : kind.help)
+    }
+
+    /// Static teal (not severity color) when spinning but motion is off —
+    /// reduce-motion still gets the in-flight signal, just without the lap.
+    @ViewBuilder
+    private func outline(_ shape: some InsettableShape, perimeter: CGFloat) -> some View {
+        if spinning, live, !reduceMotion {
+            OrbitingOutline(shape: shape, color: .teal, perimeter: perimeter)
+        } else if spinning {
+            shape.strokeBorder(Color.teal.opacity(0.6), lineWidth: 1)
+        } else {
+            shape.strokeBorder(color.opacity(0.45), lineWidth: 1)
+        }
     }
 }
 
@@ -102,7 +202,7 @@ struct UnreachableLumpView: View {
                 Image(systemName: "bolt.horizontal.circle")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 16)
+                    .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tiles.count == 1
                         ? "1 repo can't connect"
@@ -152,23 +252,37 @@ private struct RepoRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: state.isWorktree ? "arrow.triangle.branch" : "folder")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(severity: state.severity))
-                .frame(width: 16)
-                .help(state.isWorktree ? "Linked worktree" : "Repository")
+            // Only worktree rows spin: a worktree IS the branch the CI is
+            // running for, so the motion points at the action. A plain repo
+            // row's click lands in Finder, where nothing is active.
+            RowKindIcon(
+                kind: state.isWorktree ? .worktree : .repo,
+                color: Color(severity: state.severity),
+                spinning: state.isWorktree
+                    && (state.worstCI == .pending
+                        || state.runs.contains { $0.state == .running }))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     CopyHoverText(
-                        text: state.name,
+                        text: titleText,
                         copyValue: RepoTileView.copyName(for: state),
                         font: .callout.weight(.semibold),
                         copy: actions.copyText)
+                    // On a worktree row the branch is what you scan for, so
+                    // it reads as a label rather than a footnote.
                     CopyHoverText(
                         text: "⎇ \(state.branch)",
                         copyValue: state.branch,
-                        color: .secondary,
+                        font: state.isWorktree ? .caption.weight(.medium) : .caption2,
+                        color: state.isWorktree ? nil : .secondary,
                         copy: actions.copyText)
+                    if let dir = worktreeDirName {
+                        Text(dir)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .help("Worktree directory")
+                    }
                     if let reason = state.pruneReason {
                         PruneableBadge(help: reason)
                     } else if let merge = state.mergeState {
@@ -213,6 +327,22 @@ private struct RepoRowView: View {
         // nothing to fix (nothing actionable lives in Finder).
         .onTapGesture(perform: performPrimary)
         .contextMenu { RepoContextMenuItems(state: state, actions: actions) }
+    }
+
+    /// Worktree names arrive as "repo ⎇ dir"; the row shows the repo alone
+    /// so the branch that follows isn't printed twice.
+    private var titleText: String {
+        guard state.isWorktree, let range = state.name.range(of: " ⎇ ") else { return state.name }
+        return String(state.name[..<range.lowerBound])
+    }
+
+    /// The worktree's directory name, only when it tells you something the
+    /// branch doesn't (`repo-feature` vs `⎇ feature` is the same fact).
+    private var worktreeDirName: String? {
+        guard state.isWorktree, let range = state.name.range(of: " ⎇ ") else { return nil }
+        let dir = String(state.name[range.upperBound...])
+        let branchTail = state.branch.split(separator: "/").last.map(String.init) ?? state.branch
+        return dir == state.branch || dir == branchTail ? nil : dir
     }
 
     private func performPrimary() {
@@ -348,11 +478,10 @@ private struct PRRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "arrow.triangle.pull")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(severity: state.severity))
-                .frame(width: 16)
-                .help("Pull request")
+            RowKindIcon(
+                kind: .pr,
+                color: Color(severity: state.severity),
+                spinning: state.ci == .pending)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     CopyHoverText(
@@ -396,8 +525,10 @@ private struct PRRowView: View {
                     .padding(.horizontal, 4)
                     .background(Capsule().fill(.quaternary))
                     .help("Draft — not ready for review")
-            } else if state.ci != .none {
-                Circle().fill(ciColor).frame(width: 7, height: 7)
+            } else if state.ci == .pass || state.ci == .fail {
+                // Pending doesn't need a trailing dot — the leading outline
+                // is the spinner while CI runs.
+                CIStatusDot(ci: state.ci)
                     .help(ciHelp)
             }
             AgoText(date: state.updatedAt)
@@ -431,16 +562,6 @@ private struct PRRowView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("More actions")
-    }
-
-    private var ciColor: Color {
-        switch state.ci {
-        case .pass: return .green
-        case .fail: return .red
-        // Teal = in flight, matching runs and agent shell state.
-        case .pending: return .teal
-        case .none: return .clear
-        }
     }
 
     private var ciHelp: String {

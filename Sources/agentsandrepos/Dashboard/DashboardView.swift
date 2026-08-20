@@ -21,10 +21,6 @@ struct DashboardView: View {
 
     @State private var contentHeight: CGFloat = 400
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8),
-    ]
     /// Divider + FooterBar, which sit below the scroll area.
     private let footerAllowance: CGFloat = 38
 
@@ -116,7 +112,7 @@ struct DashboardView: View {
             if tiles.isEmpty {
                 InfoRow(text: "No agents running")
             } else {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                LazyVStack(spacing: 5) {
                     ForEach(tiles) { tile in
                         AgentTileView(
                             state: tile,
