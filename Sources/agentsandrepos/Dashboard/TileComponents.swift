@@ -121,7 +121,7 @@ struct PRIndicator: View {
         if prCount > 0 {
             HStack(spacing: 3) {
                 if ci != .none {
-                    Circle().fill(ciColor).frame(width: 7, height: 7)
+                    CIStatusDot(ci: ci, spins: false)
                 }
                 Text("\(prCount)")
                     .font(.caption2.weight(.semibold))
@@ -144,17 +144,6 @@ struct PRIndicator: View {
         case .none: return base
         }
     }
-
-    private var ciColor: Color {
-        switch ci {
-        case .pass: return .green
-        case .fail: return .red
-        // Teal = "in flight, will resolve" — same concept as an agent's
-        // shell state, so they share a color.
-        case .pending: return .teal
-        case .none: return .clear
-        }
-    }
 }
 
 /// One full line per repo-level workflow run (deploys, dispatches — not PR
@@ -172,9 +161,13 @@ struct ActionsRunRow: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: symbol)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Color(runState: run.state))
+            if run.state == .running {
+                CIRunningSpinner(color: Color(runState: run.state), size: 9)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color(runState: run.state))
+            }
             Text("\(run.workflowName) \(run.state.rawValue)")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Color(runState: run.state))
@@ -326,6 +319,121 @@ private struct SeesawEyesAgentIcon: View {
             .fill(color)
             .frame(width: AgentIcon.eyeWidth, height: height)
             .position(x: centerX, y: bottom - height / 2)
+    }
+}
+
+/// GitHub-style in-flight spinner: a short arc orbiting a faint full ring,
+/// shown wherever CI or a workflow run is still executing. Same discipline
+/// as BusyAgentIcon: the repeat-forever leaf only exists while the dashboard
+/// is visible, and reduced motion (or a hidden dashboard) gets the static
+/// dot this replaced.
+struct CIRunningSpinner: View {
+    let color: Color
+    var size: CGFloat = 7
+    @Environment(\.dashboardLive) private var live
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if live, !reduceMotion {
+            SpinningArc(color: color, size: size)
+        } else {
+            Circle().fill(color).frame(width: size, height: size)
+        }
+    }
+}
+
+/// State lives in this leaf so snapshot re-renders don't restart the
+/// rotation phase. Strokes are inset so the whole spinner fits the same
+/// frame as the dot it replaces — neighbors don't shift.
+private struct SpinningArc: View {
+    let color: Color
+    let size: CGFloat
+    @State private var spinning = false
+
+    var body: some View {
+        let lineWidth = max(1.5, size / 5)
+        ZStack {
+            Circle()
+                .strokeBorder(color.opacity(0.35), lineWidth: lineWidth)
+            Circle()
+                .inset(by: lineWidth / 2)
+                .trim(from: 0, to: 0.3)
+                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(spinning ? 360 : 0))
+        }
+        .frame(width: size, height: size)
+        .onAppear {
+            withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
+                spinning = true
+            }
+        }
+    }
+}
+
+/// CIRunningSpinner grown to outline size: the shape's border drawn faint,
+/// with a bright segment orbiting its perimeter. Animated leaf only — state
+/// lives here so snapshot re-renders don't restart the lap, and callers gate
+/// on dashboardLive/reduce-motion and supply their own static outline
+/// fallback (each site keeps its exact resting look).
+///
+/// The orbit is a dash pattern whose period is the whole perimeter, with
+/// dashPhase animated by exactly one period per cycle — that's what makes
+/// the repeat seamless for non-circular shapes, where rotating a trimmed
+/// arc would visibly rotate the shape itself.
+struct OrbitingOutline<S: InsettableShape>: View {
+    let shape: S
+    let color: Color
+    /// Approximate stroke-path length. Only needs to be close: it sets the
+    /// segment's fraction of the lap, not the seam (the phase animation is
+    /// keyed to this same value, so the loop always closes).
+    let perimeter: CGFloat
+    var lineWidth: CGFloat = 1.5
+    var duration: Double = 1.4
+    @State private var phase: CGFloat = 0
+
+    var body: some View {
+        ZStack {
+            shape.strokeBorder(color.opacity(0.3), lineWidth: lineWidth)
+            shape
+                .inset(by: lineWidth / 2)
+                .stroke(
+                    color,
+                    style: StrokeStyle(
+                        lineWidth: lineWidth, lineCap: .round,
+                        dash: [perimeter * 0.28, perimeter * 0.72],
+                        dashPhase: phase))
+        }
+        .onAppear {
+            withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+                phase = -perimeter
+            }
+        }
+    }
+}
+
+/// CI dot for PR rows, tiles, and repo-tile corners: solid green/red once
+/// settled, the spinner while running. Teal = in flight, everywhere.
+/// `spins: false` keeps pending as a static teal dot — for spots like a
+/// repo row's corner, where the row's click doesn't land on the running
+/// thing and motion would promise activity the click can't reach.
+struct CIStatusDot: View {
+    let ci: PullRequest.CIStatus
+    var size: CGFloat = 7
+    var spins = true
+
+    var body: some View {
+        switch ci {
+        case .pending where spins:
+            CIRunningSpinner(color: .teal, size: size)
+        case .pending:
+            Circle().fill(.teal).frame(width: size, height: size)
+        case .pass:
+            Circle().fill(.green).frame(width: size, height: size)
+        case .fail:
+            Circle().fill(.red).frame(width: size, height: size)
+        case .none:
+            EmptyView()
+        }
     }
 }
 

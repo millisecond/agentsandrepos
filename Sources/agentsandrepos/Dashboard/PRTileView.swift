@@ -23,9 +23,7 @@ struct PRTileView: View {
                             .padding(.horizontal, 4)
                             .background(Capsule().fill(.quaternary))
                     } else if state.ci != .none {
-                        Circle()
-                            .fill(ciColor)
-                            .frame(width: 7, height: 7)
+                        CIStatusDot(ci: state.ci)
                             .padding(.top, 2)
                     }
                 }
@@ -67,14 +65,5 @@ struct PRTileView: View {
             Button("Copy Branch Name") { actions.copyPath(state.branch) }
         }
         .help("\(state.reference) — \(state.title) · \(state.statusLabel)")
-    }
-
-    private var ciColor: Color {
-        switch state.ci {
-        case .pass: return .green
-        case .fail: return .red
-        case .pending: return .yellow
-        case .none: return .clear
-        }
     }
 }
