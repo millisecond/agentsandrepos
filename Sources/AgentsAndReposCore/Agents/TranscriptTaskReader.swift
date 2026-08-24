@@ -1,22 +1,45 @@
 import Foundation
 
+/// One human or assistant message from a session transcript, cleaned and
+/// truncated the same way as the headline fields.
+public struct TranscriptMessage: Sendable, Equatable {
+    public enum Role: Sendable, Equatable {
+        case user, agent
+    }
+
+    public let role: Role
+    public let text: String
+
+    public init(role: Role, text: String) {
+        self.role = role
+        self.text = text
+    }
+}
+
 /// The tail of a Claude Code session's conversation, pulled from its
 /// transcript: the last human-typed message and the last assistant text
-/// reply, cleaned and truncated, plus which of the two is more recent.
+/// reply, cleaned and truncated, plus which of the two is more recent —
+/// and a deeper capped history so search can reach past what the tile shows.
 public struct AgentTask: Sendable, Equatable {
     public var lastUserMessage: String?
     public var lastAgentMessage: String?
     /// True when the user message is the more recent of the two (the agent's
     /// turn is pending or in progress).
     public var userSpokeLast: Bool
+    /// The most recent messages of both roles, oldest first, capped at
+    /// `TranscriptTaskReader.historyLimit`. The headline fields can predate
+    /// this window (a long assistant streak pushes the last human prompt
+    /// out), so they are stored separately, not derived.
+    public var history: [TranscriptMessage]
 
     public init(
         lastUserMessage: String? = nil, lastAgentMessage: String? = nil,
-        userSpokeLast: Bool = false
+        userSpokeLast: Bool = false, history: [TranscriptMessage] = []
     ) {
         self.lastUserMessage = lastUserMessage
         self.lastAgentMessage = lastAgentMessage
         self.userSpokeLast = userSpokeLast
+        self.history = history
     }
 }
 
@@ -34,6 +57,11 @@ public enum TranscriptTaskReader {
     /// all, which would otherwise scan the whole file every poll).
     static let maxScanBytes = 4 * 1024 * 1024
     static let maxPromptChars = 200
+    /// How many messages (both roles combined) `AgentTask.history` keeps —
+    /// the dashboard search's reach back into a session. The deep backward
+    /// scan to fill it runs once per session (still `maxScanBytes`-capped);
+    /// after that, appends are parsed incrementally.
+    public static let historyLimit = 20
 
     public static func transcriptPath(
         cwd: String, sessionId: String, home: String = NSHomeDirectory()
@@ -62,22 +90,76 @@ public enum TranscriptTaskReader {
         else { return AgentTask() }
 
         cacheLock.lock()
-        if let c = cache[path], c.mtime == mtime, c.size == size {
-            let task = c.task
-            cacheLock.unlock()
-            return task
-        }
+        let prev = cache[path]
         cacheLock.unlock()
+        if let prev, prev.mtime == mtime, prev.size == size {
+            return prev.task
+        }
 
         guard let fh = FileHandle(forReadingAtPath: path) else { return AgentTask() }
         defer { try? fh.close() }
         guard let end = try? fh.seekToEnd() else { return AgentTask() }
-        let task = scanBackwards(fh: fh, size: end)
+
+        // Transcripts are append-only JSONL, so a grown file only needs its
+        // new bytes parsed — O(appended), not O(tail). Anything unusual (file
+        // shrank, huge gap, previous read ended mid-line because a write was
+        // in flight) falls back to the full backward scan.
+        let task: AgentTask
+        if let prev, end > prev.size, end - prev.size <= UInt64(maxScanBytes),
+            endsOnLineBoundary(fh: fh, at: prev.size)
+        {
+            try? fh.seek(toOffset: prev.size)
+            let data = (try? fh.read(upToCount: Int(end - prev.size))) ?? Data()
+            task = appended(to: prev.task, parsing: data)
+        } else {
+            task = scanBackwards(fh: fh, size: end)
+        }
 
         cacheLock.lock()
         cache[path] = CachedTask(mtime: mtime, size: size, task: task)
         cacheLock.unlock()
         return task
+    }
+
+    /// True when the byte before `offset` is a newline — i.e. the previous
+    /// read stopped at a whole line and the appended region starts on one.
+    private static func endsOnLineBoundary(fh: FileHandle, at offset: UInt64) -> Bool {
+        guard offset > 0 else { return true }
+        try? fh.seek(toOffset: offset - 1)
+        guard let byte = try? fh.read(upToCount: 1), byte.count == 1 else { return false }
+        return byte[byte.startIndex] == UInt8(ascii: "\n")
+    }
+
+    /// Merges messages parsed from an appended region (oldest first) into a
+    /// cached task. A trailing partial line fails to parse and is skipped
+    /// here; the boundary check above catches it on the next read and
+    /// triggers a full rescan, so nothing is lost for good.
+    static func appended(to prev: AgentTask, parsing data: Data) -> AgentTask {
+        let new = messages(in: data)
+        guard !new.isEmpty else { return prev }
+        var history = prev.history + new
+        if history.count > historyLimit {
+            history.removeFirst(history.count - historyLimit)
+        }
+        return AgentTask(
+            lastUserMessage: new.last { $0.role == .user }?.text ?? prev.lastUserMessage,
+            lastAgentMessage: new.last { $0.role == .agent }?.text ?? prev.lastAgentMessage,
+            userSpokeLast: new.last?.role == .user,
+            history: history)
+    }
+
+    /// All prompt/assistant messages in a chunk, oldest first.
+    static func messages(in data: Data) -> [TranscriptMessage] {
+        let text = String(decoding: data, as: UTF8.self)
+        var out: [TranscriptMessage] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            if let p = promptText(fromLine: line) {
+                out.append(TranscriptMessage(role: .user, text: p))
+            } else if let a = assistantText(fromLine: line) {
+                out.append(TranscriptMessage(role: .agent, text: a))
+            }
+        }
+        return out
     }
 
     /// Transcript size as of the last `read` for this session, straight from
@@ -126,30 +208,48 @@ public enum TranscriptTaskReader {
         return scan.task
     }
 
-    /// Accumulates the two slots while lines arrive newest-first: the first
-    /// hit per slot wins, and whichever slot fills first spoke last.
+    /// Accumulates the two headline slots plus the history window while lines
+    /// arrive newest-first: the first hit per slot wins, whichever slot fills
+    /// first spoke last, and every message feeds history until it's full.
+    /// The scan runs until both slots AND history are filled (or the byte
+    /// budget runs out) — the slots can outlive the window when one role
+    /// streaks past `historyLimit`.
     struct Scan {
         var user: String?
         var agent: String?
         private var userLast = false
+        /// Newest-first while scanning; reversed into the task.
+        private var history: [TranscriptMessage] = []
 
-        var isComplete: Bool { user != nil && agent != nil }
+        var isComplete: Bool {
+            user != nil && agent != nil
+                && history.count >= TranscriptTaskReader.historyLimit
+        }
 
         mutating func take(line: Substring) {
-            if user == nil, let p = TranscriptTaskReader.promptText(fromLine: line) {
-                user = p
-                userLast = agent == nil
-            } else if agent == nil,
-                let a = TranscriptTaskReader.assistantText(fromLine: line)
-            {
-                agent = a
+            let message: TranscriptMessage?
+            if let p = TranscriptTaskReader.promptText(fromLine: line) {
+                message = TranscriptMessage(role: .user, text: p)
+                if user == nil {
+                    user = p
+                    userLast = agent == nil
+                }
+            } else if let a = TranscriptTaskReader.assistantText(fromLine: line) {
+                message = TranscriptMessage(role: .agent, text: a)
+                if agent == nil { agent = a }
+            } else {
+                message = nil
+            }
+            if let message, history.count < TranscriptTaskReader.historyLimit {
+                history.append(message)
             }
         }
 
         var task: AgentTask {
             AgentTask(
                 lastUserMessage: user, lastAgentMessage: agent,
-                userSpokeLast: user != nil && userLast)
+                userSpokeLast: user != nil && userLast,
+                history: history.reversed())
         }
     }
 

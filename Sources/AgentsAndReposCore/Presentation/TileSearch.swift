@@ -26,11 +26,14 @@ public struct SearchQuery: Sendable, Equatable {
 
 extension AgentTileState {
     /// Name, location, status, path, and the transcript tail — the "what was
-    /// that agent doing" text is usually what the user remembers.
+    /// that agent doing" text is usually what the user remembers. Reaches
+    /// the whole capped history, not just the two headline messages the
+    /// tile shows.
     public var searchFields: [String] {
         var fields = [title, subtitle, statusLabel, path]
         if let m = task.lastUserMessage { fields.append(m) }
         if let m = task.lastAgentMessage { fields.append(m) }
+        fields += task.history.map(\.text)
         return fields
     }
 

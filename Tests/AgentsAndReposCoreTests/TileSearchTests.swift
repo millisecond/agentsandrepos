@@ -68,6 +68,22 @@ final class TileSearchTests: XCTestCase {
         XCTAssertFalse(tile.matches(SearchQuery("billing")))
     }
 
+    func testAgentTileMatchesDeepHistory() {
+        let task = AgentTask(
+            lastUserMessage: "latest thing", lastAgentMessage: "done",
+            history: [
+                TranscriptMessage(role: .user, text: "refactor the billing webhooks"),
+                TranscriptMessage(role: .agent, text: "moved retries into the queue"),
+                TranscriptMessage(role: .user, text: "latest thing"),
+                TranscriptMessage(role: .agent, text: "done"),
+            ])
+        let tile = AgentTileState(
+            agent: agent(.idle, task: task), location: "api", path: "/p/api")
+        XCTAssertTrue(tile.matches(SearchQuery("webhooks")))
+        XCTAssertTrue(tile.matches(SearchQuery("retries queue")))
+        XCTAssertFalse(tile.matches(SearchQuery("invoices")))
+    }
+
     func testAgentTileMatchesStatusLabel() {
         let tile = AgentTileState(
             agent: agent(.waiting("permission")), location: "l", path: "/x")

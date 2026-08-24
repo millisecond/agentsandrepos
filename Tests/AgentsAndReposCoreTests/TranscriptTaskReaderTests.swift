@@ -203,6 +203,83 @@ final class TranscriptTaskReaderTests: XCTestCase {
         XCTAssertFalse(task.userSpokeLast)
     }
 
+    // MARK: - History
+
+    func testHistoryCollectedOldestFirstAndCapped() {
+        var body = ""
+        for i in 1...(TranscriptTaskReader.historyLimit + 5) {
+            body += userLine("ask \(i)") + "\n"
+            body += assistantLine("{\"type\":\"text\",\"text\":\"reply \(i)\"}") + "\n"
+        }
+        let task = TranscriptTaskReader.lastMessages(in: Data(body.utf8))
+        XCTAssertEqual(task.history.count, TranscriptTaskReader.historyLimit)
+        // Newest at the end, window covering the most recent messages.
+        XCTAssertEqual(task.history.last?.text, "reply \(TranscriptTaskReader.historyLimit + 5)")
+        XCTAssertEqual(task.history.last?.role, .agent)
+        XCTAssertEqual(task.lastUserMessage, "ask \(TranscriptTaskReader.historyLimit + 5)")
+    }
+
+    func testHeadlineSlotsOutliveHistoryWindow() {
+        // An assistant streak longer than the window must not lose the last
+        // human prompt behind it.
+        var body = userLine("the buried ask") + "\n"
+        for i in 1...(TranscriptTaskReader.historyLimit + 3) {
+            body += assistantLine("{\"type\":\"text\",\"text\":\"step \(i)\"}") + "\n"
+        }
+        let task = TranscriptTaskReader.lastMessages(in: Data(body.utf8))
+        XCTAssertEqual(task.lastUserMessage, "the buried ask")
+        XCTAssertEqual(task.history.count, TranscriptTaskReader.historyLimit)
+        XCTAssertTrue(task.history.allSatisfy { $0.role == .agent })
+    }
+
+    func testAppendedMergesAndTrims() {
+        let prev = AgentTask(
+            lastUserMessage: "old ask", lastAgentMessage: "old reply", userSpokeLast: false,
+            history: [
+                TranscriptMessage(role: .user, text: "old ask"),
+                TranscriptMessage(role: .agent, text: "old reply"),
+            ])
+        let appended = Data(
+            (userLine("new ask") + "\n"
+                + assistantLine("{\"type\":\"text\",\"text\":\"new reply\"}") + "\n").utf8)
+        let task = TranscriptTaskReader.appended(to: prev, parsing: appended)
+        XCTAssertEqual(task.lastUserMessage, "new ask")
+        XCTAssertEqual(task.lastAgentMessage, "new reply")
+        XCTAssertFalse(task.userSpokeLast)
+        XCTAssertEqual(task.history.map(\.text), ["old ask", "old reply", "new ask", "new reply"])
+
+        // Tool-result-only appends change nothing.
+        let noise = Data(
+            #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"ok"}]}}"#
+                .utf8)
+        XCTAssertEqual(TranscriptTaskReader.appended(to: task, parsing: noise), task)
+    }
+
+    func testIncrementalReadPicksUpAppendedMessages() throws {
+        let home = NSTemporaryDirectory() + "ttr-\(UUID().uuidString)"
+        let dir = home + "/.claude/projects/-x"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let path = dir + "/sess.jsonl"
+        try (userLine("first ask") + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+
+        let first = TranscriptTaskReader.read(cwd: "/x", sessionId: "sess", home: home)
+        XCTAssertEqual(first.lastUserMessage, "first ask")
+
+        // Append (with a changed mtime) and re-read: history holds both.
+        let fh = FileHandle(forWritingAtPath: path)!
+        fh.seekToEndOfFile()
+        fh.write(Data((assistantLine("{\"type\":\"text\",\"text\":\"on it\"}") + "\n").utf8))
+        try fh.close()
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(2)], ofItemAtPath: path)
+
+        let second = TranscriptTaskReader.read(cwd: "/x", sessionId: "sess", home: home)
+        XCTAssertEqual(second.lastUserMessage, "first ask")
+        XCTAssertEqual(second.lastAgentMessage, "on it")
+        XCTAssertEqual(second.history.map(\.text), ["first ask", "on it"])
+        XCTAssertFalse(second.userSpokeLast)
+    }
+
     // MARK: - Plan integration
 
     func testAgentPlansSummarizeEachMessageAlone() {
