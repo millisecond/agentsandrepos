@@ -5,6 +5,7 @@ import AppKit
 protocol MenuActionDelegate: AnyObject {
     func menuOpened()
     func refreshNow()
+    func searchFocused()
     func togglePRScope()
     func toggleAutoFetch()
     func fetchRepo(path: String)
@@ -21,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var demoDriver: DemoDriver?
     private var statusController: StatusItemController!
     private var settingsController: SettingsWindowController?
+    private var onboardingController: OnboardingWindowController?
     private var watcher: DirectoryWatcher?
     private var lastSnapshot: Snapshot = .empty
     private let store = SnapshotStore()
@@ -30,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popoverController: DashboardPopoverController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let isFirstRun = ConfigStore.isFirstRun()
         let config = ConfigStore.load()
         statusController = StatusItemController(delegate: self)
 
@@ -79,6 +82,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(didWake(_:)),
             name: NSWorkspace.didWakeNotification, object: nil)
+
+        // First launch: ask where repos live. The engine is already running on
+        // the default (~/Projects), so closing the window without finishing
+        // just keeps that default.
+        if isFirstRun {
+            let controller = OnboardingWindowController { [weak self] newConfig in
+                guard let self else { return }
+                if let engine = self.engine {
+                    Task { await engine.updateConfig(newConfig) }
+                }
+                self.onboardingController?.close()
+                self.onboardingController = nil
+            }
+            onboardingController = controller
+            controller.show(config: config)
+        }
     }
 
     @objc private func didWake(_ notification: Notification) {
@@ -96,6 +115,11 @@ extension AppDelegate: MenuActionDelegate {
     func refreshNow() {
         guard let engine else { return }
         Task { await engine.kickAll() }
+    }
+
+    func searchFocused() {
+        guard let engine else { return }
+        Task { await engine.kickSearch() }
     }
 
     func togglePRScope() {

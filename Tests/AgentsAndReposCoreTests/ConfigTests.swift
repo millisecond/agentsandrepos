@@ -50,6 +50,15 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c, AppConfig())
     }
 
+    func testIsFirstRunFlipsAfterLoad() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cfg-test-\(UUID().uuidString)/config.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        XCTAssertTrue(ConfigStore.isFirstRun(url: url))
+        _ = ConfigStore.load(from: url)
+        XCTAssertFalse(ConfigStore.isFirstRun(url: url))
+    }
+
     func testStoreCreatesDefaultFile() {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cfg-test-\(UUID().uuidString)/config.json")

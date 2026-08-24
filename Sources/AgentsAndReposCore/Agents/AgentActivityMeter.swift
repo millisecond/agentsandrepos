@@ -61,6 +61,18 @@ public struct AgentActivityMeter: Sendable {
         tracks[id] = track
     }
 
+    /// Buckets between `now`'s bucket and the most recent bucket in which
+    /// this session appended transcript bytes — 0 while the in-progress
+    /// bucket has bytes, nil when the window holds none (or the session is
+    /// unknown). Evidence for `AgentStatusDebouncer`. Status floors
+    /// deliberately don't count: they derive from the very status the
+    /// debouncer is second-guessing, and a held busy would feed its own hold.
+    public func bucketsSinceLastAppend(id: String, at now: Date) -> Int? {
+        // record() only stores positive deltas, so any key present is real growth.
+        guard let latest = tracks[id]?.buckets.keys.max() else { return nil }
+        return max(0, Int(Self.bucket(at: now) - latest))
+    }
+
     /// Drops history for sessions that no longer exist.
     public mutating func prune(keeping ids: Set<String>) {
         tracks = tracks.filter { ids.contains($0.key) }

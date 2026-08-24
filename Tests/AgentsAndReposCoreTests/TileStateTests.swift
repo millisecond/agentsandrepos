@@ -305,6 +305,16 @@ final class TileStateTests: XCTestCase {
             RepoTileState(worktree: wtDirty, parent: overview).agentDots, [.info])
     }
 
+    func testShellAgentCountsAsWorkInFlight() {
+        // A session parked on a running command is mid-task, not idle: it
+        // dots as info and lifts the tile like a busy agent would.
+        let overview = repo(agents: [agent(.shell)])
+        let tile = RepoTileState(repo: overview)
+        XCTAssertEqual(tile.agentDots, [.info])
+        XCTAssertEqual(tile.severity, .info)
+        XCTAssertEqual(RepoTileState.dots(of: [agent(.idle)]), [.muted])
+    }
+
     func testRepoTilesWithoutActivitySortAlphabeticallyRegardlessOfSeverity() {
         var snap = Snapshot.empty
         snap.repos = [

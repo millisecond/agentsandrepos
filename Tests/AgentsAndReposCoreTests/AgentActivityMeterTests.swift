@@ -235,4 +235,35 @@ final class AgentActivityMeterTests: XCTestCase {
         let m = AgentActivityMeter()
         XCTAssertEqual(m.levels(id: "nope", at: at(bucket: 0)), [])
     }
+
+    // MARK: - Debounce evidence
+
+    func testBucketsSinceLastAppendTracksBytes() {
+        var m = AgentActivityMeter()
+        m.record(id: "a", transcriptSize: 0, at: at(bucket: 0))
+        // Baseline only — no growth yet.
+        XCTAssertNil(m.bucketsSinceLastAppend(id: "a", at: at(bucket: 0)))
+        m.record(id: "a", transcriptSize: 100, at: at(bucket: 0, offset: 3))
+        XCTAssertEqual(m.bucketsSinceLastAppend(id: "a", at: at(bucket: 0, offset: 5)), 0)
+        // The gap grows as buckets pass without appends.
+        XCTAssertEqual(m.bucketsSinceLastAppend(id: "a", at: at(bucket: 1)), 1)
+        XCTAssertEqual(m.bucketsSinceLastAppend(id: "a", at: at(bucket: 3, offset: 4)), 3)
+        // A new append resets it.
+        m.record(id: "a", transcriptSize: 200, at: at(bucket: 3, offset: 5))
+        XCTAssertEqual(m.bucketsSinceLastAppend(id: "a", at: at(bucket: 3, offset: 6)), 0)
+    }
+
+    func testBucketsSinceLastAppendIgnoresStatusFloors() {
+        // Floors derive from status — counting them would let a held busy
+        // status feed its own debounce hold.
+        var m = AgentActivityMeter()
+        m.record(id: "a", transcriptSize: 1000, busy: true, at: at(bucket: 0))
+        m.record(id: "a", transcriptSize: 1000, busy: true, at: at(bucket: 1))
+        XCTAssertNil(m.bucketsSinceLastAppend(id: "a", at: at(bucket: 1)))
+    }
+
+    func testBucketsSinceLastAppendUnknownSession() {
+        let m = AgentActivityMeter()
+        XCTAssertNil(m.bucketsSinceLastAppend(id: "nope", at: at(bucket: 0)))
+    }
 }

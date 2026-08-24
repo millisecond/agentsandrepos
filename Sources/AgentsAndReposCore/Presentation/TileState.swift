@@ -335,8 +335,11 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         agents.map { agent in
             switch agent.status {
             case .waiting: return .attention
-            case .busy: return .info
-            case .shell, .idle, .unknown: return .muted
+            // Shell counts as work in flight: the agent is parked on a
+            // running command and will resume — muting it made the overview
+            // report a mid-task session as idle.
+            case .busy, .shell: return .info
+            case .idle, .unknown: return .muted
             }
         }
     }
@@ -364,8 +367,8 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     }
 
     /// Precedence: CI/run-fail or status error → urgent > waiting agent →
-    /// attention > any in-flight work (dirty/untracked/ahead/behind, busy
-    /// agent, running action) → info > clean → ok > no git or
+    /// attention > any in-flight work (dirty/untracked/ahead/behind, busy or
+    /// shell agent, running action) → info > clean → ok > no git or
     /// unreachable-remote → muted.
     ///
     /// Dirty files are deliberately NOT attention: uncommitted work is the

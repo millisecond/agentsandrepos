@@ -62,6 +62,7 @@ final class DashboardActions {
         delegate?.setSectionExpanded(section: section, expanded: expanded)
     }
     func refreshNow() { delegate?.refreshNow() }
+    func searchFocused() { delegate?.searchFocused() }
     func togglePRScope() { delegate?.togglePRScope() }
     func toggleAutoFetch() { delegate?.toggleAutoFetch() }
 

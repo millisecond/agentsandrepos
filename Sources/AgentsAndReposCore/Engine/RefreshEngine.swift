@@ -59,6 +59,7 @@ public actor RefreshEngine {
     /// refresh and keeps the actions watch loop alive while the user looks.
     private var uiVisible = false
     private var lastFullRunsSweepAt: Date = .distantPast
+    private var lastStatusSweepAt: Date = .distantPast
     /// Fast follower for in-flight workflow runs; nil whenever the popover is
     /// hidden and nothing is running, so idle cost is zero.
     private var actionsWatchLoop: Task<Void, Never>?
@@ -155,6 +156,25 @@ public actor RefreshEngine {
         agentsTick()
         await statusTick()
         publish()
+    }
+
+    /// Search-bar focus: the user is about to look something up, so bring
+    /// anything mid-interval current now. Staleness-gated so focus/blur
+    /// cycles cost nothing: a status sweep re-runs only after 30s, GitHub
+    /// data after 60s (the same bar as popover-show). Deliberately no
+    /// `git fetch` — search reads local state and PR metadata, and O(repos)
+    /// network spawns aren't worth a focus event.
+    public func kickSearch() async {
+        agentsTick()
+        if Date().timeIntervalSince(lastStatusSweepAt) > 30 {
+            await statusTick()
+        }
+        publish()
+        if Date().timeIntervalSince(lastFullRunsSweepAt) > 60 {
+            await prTick()
+            await runsTick()
+            publish()
+        }
     }
 
     /// Popover shown/hidden. On show, GitHub PR/actions data older than a
@@ -453,10 +473,14 @@ public actor RefreshEngine {
     }
 
     private func agentsTick() {
-        var read = agentDebouncer.apply(AgentSessionReader.read())
+        let now = Date()
+        // The meter's evidence lags this tick by one (it records below, after
+        // the debounce), but the hold only needs bucket-granularity truth.
+        var read = agentDebouncer.apply(AgentSessionReader.read()) { id in
+            activityMeter.bucketsSinceLastAppend(id: id, at: now)
+        }
         // Transcript sizes come from the stat cache the read above just
         // warmed — the meter costs no filesystem access of its own.
-        let now = Date()
         for i in read.indices {
             let s = read[i]
             if let size = TranscriptTaskReader.cachedTranscriptSize(
@@ -477,6 +501,7 @@ public actor RefreshEngine {
         await forEachCapped(paths, cap: 6) { path in
             await self.statusOne(path)
         }
+        lastStatusSweepAt = Date()
     }
 
     private func statusOne(_ path: String) async {
