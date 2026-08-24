@@ -38,6 +38,16 @@ final class TileStateTests: XCTestCase {
             headRefName: "b", reviewDecision: nil, ci: ci)
     }
 
+    // MARK: - Status-error surfacing
+
+    func testStatusErrorTextSurfacesInProblemDetail() {
+        let tile = RepoTileState(
+            repo: repo(git: GitState(statusError: "fatal: detected dubious ownership")))
+        XCTAssertEqual(tile.statusError, "fatal: detected dubious ownership")
+        let problem = tile.problems.first { $0.label == "git status broken" }
+        XCTAssertEqual(problem?.detail, "fatal: detected dubious ownership")
+    }
+
     // MARK: - Agent tiles
 
     func testAgentSeverityMapping() {

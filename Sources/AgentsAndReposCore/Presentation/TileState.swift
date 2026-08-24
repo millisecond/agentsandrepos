@@ -83,6 +83,10 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     public let severity: TileSeverity
     /// Local git breakage (`git status` itself failing) — genuinely urgent.
     public let hasError: Bool
+    /// What git actually said when status failed — the difference between
+    /// "something's broken" and knowing it's dubious ownership, a missing
+    /// CLT install, or a timeout.
+    public let statusError: String?
     /// The remote can't be reached (fetch failing: wrong account, no network).
     /// Deliberately NOT urgent — on a machine signed into the wrong GitHub
     /// account this is most repos, and it would drown the ranked list.
@@ -143,6 +147,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
             self.branch = git?.branch ?? "…"
         }
         self.hasError = git?.statusError != nil
+        self.statusError = git?.statusError
         self.unreachable = git?.fetchError != nil
         self.dirty = git?.dirty ?? 0
         self.untracked = git?.untracked ?? 0
@@ -194,6 +199,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
             self.branch = branchName ?? "…"
         }
         self.hasError = git?.statusError != nil
+        self.statusError = git?.statusError
         self.unreachable = git?.fetchError != nil
         self.dirty = git?.dirty ?? 0
         self.untracked = git?.untracked ?? 0
@@ -240,7 +246,10 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
                     detail: "directory is gone — git worktree prune",
                     url: nil, severity: .info))
         } else if hasError {
-            list.append(RepoProblem(label: "git status broken", url: nil, severity: .urgent))
+            list.append(
+                RepoProblem(
+                    label: "git status broken", detail: statusError, url: nil,
+                    severity: .urgent))
         }
         for run in runs where run.state == .failed {
             list.append(

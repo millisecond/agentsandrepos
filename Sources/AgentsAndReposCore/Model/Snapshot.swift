@@ -65,11 +65,14 @@ public struct RepoOverview: Sendable, Equatable, Identifiable {
     /// Fetch errors are deliberately excluded: a machine signed into the
     /// wrong GitHub account has dozens of unreachable repos, which the
     /// dashboard lumps quietly — a permanent "22" error badge in the menu
-    /// bar would undo that.
+    /// bar would undo that. A prunable worktree's status error is excluded
+    /// for the same reason: the dashboard renders a stale record as a muted
+    /// cleanup note, and dead-eyeing the menu bar over it points at nothing
+    /// visibly red.
     public var hasError: Bool {
         if git?.statusError != nil { return true }
         if prs.contains(where: { $0.ci == .fail }) { return true }
-        return worktrees.contains { $0.git?.statusError != nil }
+        return worktrees.contains { $0.git?.statusError != nil && !$0.worktree.prunable }
     }
 }
 
