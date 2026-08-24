@@ -313,6 +313,11 @@ private struct SeesawEyesAgentIcon: View {
             .animation(
                 .easeInOut(duration: 0.55).repeatForever(autoreverses: true),
                 value: swapped)
+            // Resolve parent-assigned position before the repeat-forever
+            // transaction sees it: without this, the late first-layout pass
+            // (popover content-height lands a tick after appear) is captured
+            // by the running animation and the leaf glides into place.
+            .geometryGroup()
             .onAppear { swapped = true }
     }
 
@@ -371,6 +376,9 @@ private struct SpinningArc: View {
         .animation(
             .linear(duration: 1.1).repeatForever(autoreverses: false),
             value: spinning)
+        // See SeesawEyesAgentIcon: settle parent geometry outside the
+        // repeat-forever transaction or the spinner glides into place.
+        .geometryGroup()
         .onAppear { spinning = true }
     }
 }
@@ -413,6 +421,9 @@ struct OrbitingOutline<S: InsettableShape>: View {
         .animation(
             .linear(duration: duration).repeatForever(autoreverses: false),
             value: phase)
+        // See SeesawEyesAgentIcon: settle parent geometry outside the
+        // repeat-forever transaction or the outline glides into place.
+        .geometryGroup()
         .onAppear { phase = -perimeter }
     }
 }
