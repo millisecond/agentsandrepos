@@ -22,7 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var demoDriver: DemoDriver?
     private var statusController: StatusItemController!
     private var settingsController: SettingsWindowController?
-    private var onboardingController: OnboardingWindowController?
+    private var onboardingController: OnboardingPopoverController?
     private var watcher: DirectoryWatcher?
     private var lastSnapshot: Snapshot = .empty
     private let store = SnapshotStore()
@@ -83,11 +83,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(didWake(_:)),
             name: NSWorkspace.didWakeNotification, object: nil)
 
-        // First launch: ask where repos live. The engine is already running on
-        // the default (~/Projects), so closing the window without finishing
-        // just keeps that default.
-        if isFirstRun {
-            let controller = OnboardingWindowController { [weak self] newConfig in
+        // First launch: ask where repos live, in a popover anchored to the
+        // status item. The engine is already running on the default
+        // (~/Projects), so skipping just keeps that default. `--onboarding`
+        // forces the popover for dev walkthroughs; Start still saves for real.
+        if isFirstRun || CommandLine.arguments.contains("--onboarding") {
+            let controller = OnboardingPopoverController(config: config) { [weak self] newConfig in
                 guard let self else { return }
                 if let engine = self.engine {
                     Task { await engine.updateConfig(newConfig) }
@@ -95,8 +96,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.onboardingController?.close()
                 self.onboardingController = nil
             }
+            controller.onClose = { [weak self] in self?.onboardingController = nil }
             onboardingController = controller
-            controller.show(config: config)
+            if let button = statusController.button {
+                controller.show(relativeTo: button)
+            }
         }
     }
 
@@ -108,6 +112,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: MenuActionDelegate {
     func menuOpened() {
+        // The dashboard anchors to the same status button; don't stack the
+        // welcome popover under it. Skipping this way keeps the defaults.
+        onboardingController?.close()
+        onboardingController = nil
         guard let engine else { return }
         Task { await engine.kickLight() }
     }

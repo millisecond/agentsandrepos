@@ -20,6 +20,10 @@ if arguments.contains("--help") || arguments.first == "help" {
           agentsandrepos --version   print version
           agentsandrepos --demo      run the UI on scripted fake data (README
                                      recording; see scripts/record-demo.sh)
+          agentsandrepos --onboarding
+                                     show the first-run welcome popover even
+                                     though config exists (dev walkthroughs;
+                                     Start saves for real)
           agentsandrepos unregister-login
                                      remove the login item (used by uninstall)
 

@@ -18,6 +18,10 @@ struct OnboardingView: View {
     @State private var foundCount: Int?
     let baseConfig: AppConfig
     let onFinish: (AppConfig) -> Void
+    let onSkip: () -> Void
+    /// Popover windows float above modal open panels; the controller uses
+    /// this to hide the popover while a folder picker is up.
+    let setPanelShowing: (Bool) -> Void
 
     private var chosenRoots: [String] {
         mode == .scanFolder ? [mainFolder] : individualDirs
@@ -104,6 +108,7 @@ struct OnboardingView: View {
             }
 
             HStack {
+                Button("Skip") { onSkip() }
                 Spacer()
                 Button("Start") {
                     var config = baseConfig
@@ -115,7 +120,7 @@ struct OnboardingView: View {
             }
             .padding([.horizontal, .bottom], 20)
         }
-        .frame(width: 480, height: 440)
+        .frame(width: 480, height: 420)
     }
 
     private func chooseMainFolder() {
@@ -125,6 +130,8 @@ struct OnboardingView: View {
         panel.allowsMultipleSelection = false
         panel.directoryURL = URL(
             fileURLWithPath: (mainFolder as NSString).expandingTildeInPath)
+        setPanelShowing(true)
+        defer { setPanelShowing(false) }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         mainFolder = Snapshot.abbreviatePath(url.path)
     }
@@ -135,6 +142,8 @@ struct OnboardingView: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
         panel.directoryURL = URL(fileURLWithPath: NSHomeDirectory())
+        setPanelShowing(true)
+        defer { setPanelShowing(false) }
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
             let path = Snapshot.abbreviatePath(url.path)
