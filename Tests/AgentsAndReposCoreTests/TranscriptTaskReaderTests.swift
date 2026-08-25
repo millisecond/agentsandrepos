@@ -80,10 +80,34 @@ final class TranscriptTaskReaderTests: XCTestCase {
 
     func testCleanCollapsesWhitespaceAndTruncates() {
         XCTAssertEqual(TranscriptTaskReader.clean("a  b\n\n c\t d"), "a b c d")
+        // Search-form text keeps well past the tile size…
         let long = String(repeating: "x", count: 500)
-        let cleaned = TranscriptTaskReader.clean(long)
-        XCTAssertEqual(cleaned.count, TranscriptTaskReader.maxPromptChars + 1)
+        XCTAssertEqual(TranscriptTaskReader.clean(long), long)
+        // …but is still bounded so a pathological paste can't bloat snapshots.
+        let huge = String(repeating: "x", count: TranscriptTaskReader.maxHistoryChars + 100)
+        let cleaned = TranscriptTaskReader.clean(huge)
+        XCTAssertEqual(cleaned.count, TranscriptTaskReader.maxHistoryChars + 1)
         XCTAssertTrue(cleaned.hasSuffix("…"))
+        // The headline form stays one-line-tile short.
+        let headline = TranscriptTaskReader.headline(long)
+        XCTAssertEqual(headline.count, TranscriptTaskReader.maxPromptChars + 1)
+        XCTAssertTrue(headline.hasSuffix("…"))
+    }
+
+    func testHeadlineTruncatedButHistoryKeepsFullText() {
+        let longAsk = "please " + String(repeating: "really ", count: 60) + "fix it"
+        let chunk = Data((userLine(longAsk) + "\n"
+            + assistantLine(#"{"type":"text","text":"on it"}"#) + "\n").utf8)
+        let task = TranscriptTaskReader.lastMessages(in: chunk)
+        XCTAssertEqual(
+            task.lastUserMessage,
+            String(longAsk.prefix(TranscriptTaskReader.maxPromptChars)) + "…")
+        XCTAssertEqual(task.history.first?.text, longAsk)
+        // Incremental appends truncate headlines the same way.
+        let appended = TranscriptTaskReader.appended(
+            to: AgentTask(), parsing: chunk)
+        XCTAssertEqual(appended.lastUserMessage, task.lastUserMessage)
+        XCTAssertEqual(appended.history.first?.text, longAsk)
     }
 
     // MARK: - Assistant lines

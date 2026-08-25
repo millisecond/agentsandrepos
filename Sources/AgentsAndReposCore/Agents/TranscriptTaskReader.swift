@@ -1,7 +1,9 @@
 import Foundation
 
-/// One human or assistant message from a session transcript, cleaned and
-/// truncated the same way as the headline fields.
+/// One human or assistant message from a session transcript. Search-only —
+/// never rendered — so its text keeps far more of the original than the
+/// headline fields (capped at `TranscriptTaskReader.maxHistoryChars`, not
+/// `maxPromptChars`).
 public struct TranscriptMessage: Sendable, Equatable {
     public enum Role: Sendable, Equatable {
         case user, agent
@@ -57,6 +59,10 @@ public enum TranscriptTaskReader {
     /// all, which would otherwise scan the whole file every poll).
     static let maxScanBytes = 4 * 1024 * 1024
     static let maxPromptChars = 200
+    /// Cap for `AgentTask.history` text. History exists only to be searched,
+    /// so it isn't squeezed to the one-line tile size — but it still needs a
+    /// bound so a pathological paste can't bloat every snapshot publish.
+    static let maxHistoryChars = 4000
     /// How many messages (both roles combined) `AgentTask.history` keeps —
     /// the dashboard search's reach back into a session. The deep backward
     /// scan to fill it runs once per session (still `maxScanBytes`-capped);
@@ -142,8 +148,10 @@ public enum TranscriptTaskReader {
             history.removeFirst(history.count - historyLimit)
         }
         return AgentTask(
-            lastUserMessage: new.last { $0.role == .user }?.text ?? prev.lastUserMessage,
-            lastAgentMessage: new.last { $0.role == .agent }?.text ?? prev.lastAgentMessage,
+            lastUserMessage: (new.last { $0.role == .user }?.text).map(headline)
+                ?? prev.lastUserMessage,
+            lastAgentMessage: (new.last { $0.role == .agent }?.text).map(headline)
+                ?? prev.lastAgentMessage,
             userSpokeLast: new.last?.role == .user,
             history: history)
     }
@@ -231,12 +239,12 @@ public enum TranscriptTaskReader {
             if let p = TranscriptTaskReader.promptText(fromLine: line) {
                 message = TranscriptMessage(role: .user, text: p)
                 if user == nil {
-                    user = p
+                    user = TranscriptTaskReader.headline(p)
                     userLast = agent == nil
                 }
             } else if let a = TranscriptTaskReader.assistantText(fromLine: line) {
                 message = TranscriptMessage(role: .agent, text: a)
-                if agent == nil { agent = a }
+                if agent == nil { agent = TranscriptTaskReader.headline(a) }
             } else {
                 message = nil
             }
@@ -370,10 +378,22 @@ public enum TranscriptTaskReader {
         return clean(text)
     }
 
-    /// Collapses whitespace runs and truncates for use in an LLM facts string.
+    /// Collapses whitespace runs, keeping the text near-full length: this is
+    /// the history/search form. The headline fields tighten it further via
+    /// `headline` at assignment.
     static func clean(_ s: String) -> String {
-        let collapsed = s.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        if collapsed.count <= maxPromptChars { return collapsed }
-        return String(collapsed.prefix(maxPromptChars)) + "…"
+        truncated(
+            s.split(whereSeparator: \.isWhitespace).joined(separator: " "),
+            at: maxHistoryChars)
+    }
+
+    /// The display/LLM-facts form: tiles render one line and the facts string
+    /// needs bounding, so the headline slots stay short.
+    static func headline(_ s: String) -> String {
+        truncated(s, at: maxPromptChars)
+    }
+
+    private static func truncated(_ s: String, at limit: Int) -> String {
+        s.count <= limit ? s : String(s.prefix(limit)) + "…"
     }
 }
