@@ -28,9 +28,6 @@ cask "agentsandrepos" do
   ]
 
   caveats <<~EOS
-    The app is ad-hoc signed (not notarized). If macOS blocks the first
-    launch, allow it under System Settings → Privacy & Security → Open Anyway.
-
     To start it at login, open the app and enable "Start at login" in
     Settings.
   EOS

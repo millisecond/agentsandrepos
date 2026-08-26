@@ -148,5 +148,4 @@ clear events are also written to the unified log (subsystem
 
 - macOS 14+
 - Xcode toolchain only to build from source (the cask ships a prebuilt,
-  ad-hoc-signed app — first launch needs a one-time Gatekeeper approval
-  since it isn't notarized)
+  Developer ID-signed and notarized app)
