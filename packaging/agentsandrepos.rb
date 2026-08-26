@@ -14,7 +14,7 @@ cask "agentsandrepos" do
   desc "Menubar overview of git repos, Claude Code agents, worktrees, and GitHub PRs"
   homepage "https://github.com/millisecond/agentsandrepos"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Agents & Repos.app"
   binary "#{appdir}/Agents & Repos.app/Contents/MacOS/agentsandrepos"
