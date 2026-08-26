@@ -5,16 +5,17 @@ import Foundation
 /// video. Pure and stateless — `snapshot(tick:now:)` depends only on its
 /// arguments, so tests can pin every frame.
 ///
-/// The 40-second loop tells one story: agents working → an agent waits on the
-/// human (menubar flips to waiting) → the ⋯ row menu is showcased by the
-/// cursor choreography → CI and a deploy break (menubar error) → everything
-/// resolves and the workspace goes calm, landing near the opening frame so
-/// the GIF loops.
+/// The 40-second loop tells one story: a search for the PR number filters the
+/// board to that row → agents working → an agent waits on the human (menubar
+/// flips to waiting) → the ⋯ row menu is showcased by the cursor choreography
+/// → CI and a deploy break (menubar error) → everything resolves and the
+/// workspace goes calm, landing near the opening frame so the GIF loops.
 public enum DemoTimeline {
     public static let tickInterval: TimeInterval = 0.5
     public static let totalTicks = 80  // 40s loop
 
     // Scene boundaries, in ticks.
+    public static let searchSceneStart = 2  // cursor types the PR number into search
     public static let attentionStart = 16  // an agent starts waiting on input
     public static let menuSceneStart = 28  // ⋯-menu cursor choreography window
     public static let menuSceneEnd = 52
@@ -25,6 +26,10 @@ public enum DemoTimeline {
     /// menu scene (asserted by DemoTimelineTests) so the cursor's target
     /// never moves mid-shot.
     public static let featuredRepoPath = "/Users/casey/Projects/checkout-service"
+
+    /// What the search choreography types: matches PR #482's reference and
+    /// URL and nothing else, so the board filters to exactly that row.
+    public static let searchQuery = "482"
 
     public static func snapshot(tick rawTick: Int, now: Date) -> Snapshot {
         let tick = ((rawTick % totalTicks) + totalTicks) % totalTicks

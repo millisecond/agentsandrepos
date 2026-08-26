@@ -136,6 +136,7 @@ struct DashboardView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.25)))
+        .background(DemoFrameReporter(kind: .search, id: "search"))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .strokeBorder(
