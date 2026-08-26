@@ -31,24 +31,14 @@ The menubar icon shows the most urgent thing: `⏸N` agents waiting on you,
 ## Install
 
 ```sh
-brew tap millisecond/tap
-brew install --cask agentsandrepos
-open -a "Agents & Repos"
+brew install --cask millisecond/tap/agentsandrepos
 ```
 
-The cask installs a prebuilt `Agents & Repos.app` (no Xcode needed) and links
-the `agentsandrepos` CLI. The app is ad-hoc signed, not notarized — if macOS
-blocks the first launch, allow it under System Settings → Privacy & Security →
-Open Anyway. To start it at login, enable **Start at login** in the app's
-Settings (a standard login item, visible in System Settings → General →
+The cask installs a prebuilt, notarized `Agents & Repos.app` (no Xcode
+needed), links the `agentsandrepos` CLI, and launches the app — look for the
+new menubar icon. To start it at login, enable **Start at login** in the
+app's Settings (a standard login item, visible in System Settings → General →
 Login Items).
-
-Upgrading from the old formula install (`brew services`):
-
-```sh
-brew services stop agentsandrepos && brew uninstall agentsandrepos
-brew install --cask agentsandrepos
-```
 
 Or from a checkout:
 

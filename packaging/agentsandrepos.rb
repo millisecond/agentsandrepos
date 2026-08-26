@@ -19,6 +19,13 @@ cask "agentsandrepos" do
   app "Agents & Repos.app"
   binary "#{appdir}/Agents & Repos.app/Contents/MacOS/agentsandrepos"
 
+  # Menubar app: launch right after install so it appears without an extra
+  # step. (Would need removing if this ever moves to homebrew/cask — official
+  # casks don't auto-launch.)
+  postflight do
+    system_command "/usr/bin/open", args: ["#{appdir}/Agents & Repos.app"]
+  end
+
   zap trash: [
     "~/.config/agentsandrepos",
     "~/Library/Caches/com.millisecond.agentsandrepos",
