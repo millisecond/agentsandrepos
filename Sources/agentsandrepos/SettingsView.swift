@@ -86,6 +86,10 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Check for updates daily", isOn: $config.checkForUpdates)
+                Text("Asks api.agentsandrepos.com for the latest release once a day. The request carries a random install UUID and nothing else.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if LaunchAtLogin.isAvailable {
                     Toggle("Start at login", isOn: $launchAtLogin)
                         .onChange(of: launchAtLogin) { _, on in

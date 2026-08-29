@@ -26,6 +26,15 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.prScope, .all)
     }
 
+    func testUpdateCheckOptOutPersists() throws {
+        let json = """
+            {"checkForUpdates": false}
+            """
+        let c = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertFalse(c.checkForUpdates)
+        XCTAssertTrue(AppConfig().checkForUpdates)
+    }
+
     func testRoundTrip() throws {
         var c = AppConfig()
         c.roots = ["~/Projects", "~/Work"]

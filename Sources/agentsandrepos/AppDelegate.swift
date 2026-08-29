@@ -53,6 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Gate before start(): the launch check must respect a saved opt-out.
+        updateChecker.setEnabled(config.checkForUpdates)
         updateChecker.start()
         perfMonitor.start()
 
@@ -63,6 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.store.update(snap)
                 self.statusController.update(snapshot: snap)
                 self.summaryService.update(snapshot: snap)
+                // Snapshots carry config, so Settings saves land here.
+                self.updateChecker.setEnabled(snap.config.checkForUpdates)
             }
         }
         self.engine = engine

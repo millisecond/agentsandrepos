@@ -34,6 +34,9 @@ public struct AppConfig: Codable, Sendable, Equatable {
     /// On-device LLM one-liners on tiles (Apple Intelligence). On by default;
     /// ignored when the OS/model can't provide them.
     public var showLLMSummaries: Bool = true
+    /// Daily release check against api.agentsandrepos.com (carries only the
+    /// random install UUID). Off disables the request entirely.
+    public var checkForUpdates: Bool = true
 
     public init() {}
 
@@ -45,6 +48,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         case schemaVersion, roots, scanDepth, fetchEnabled, fetchIntervalMinutes
         case autoFastForward, prScope, prIntervalMinutes, statusIntervalSeconds
         case ignoredRepos, ignoredAgents, expandedSections, showLLMSummaries
+        case checkForUpdates
     }
 
     // Lenient decoding: any missing/invalid key falls back to its default.
@@ -64,5 +68,6 @@ public struct AppConfig: Codable, Sendable, Equatable {
         ignoredAgents = (try? c.decodeIfPresent([String].self, forKey: .ignoredAgents)) ?? d.ignoredAgents
         expandedSections = (try? c.decodeIfPresent([String].self, forKey: .expandedSections)) ?? d.expandedSections
         showLLMSummaries = (try? c.decodeIfPresent(Bool.self, forKey: .showLLMSummaries)) ?? d.showLLMSummaries
+        checkForUpdates = (try? c.decodeIfPresent(Bool.self, forKey: .checkForUpdates)) ?? d.checkForUpdates
     }
 }

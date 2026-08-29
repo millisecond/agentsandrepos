@@ -9,6 +9,16 @@ final class UpdateChecker: ObservableObject {
     @Published private(set) var availableVersion: String?
 
     private var timer: Timer?
+    private var enabled = true
+
+    /// Config gate (`checkForUpdates`). Turning off clears any banner and
+    /// stops requests; turning back on checks immediately. The daily timer
+    /// keeps running either way — disabled ticks are no-ops.
+    func setEnabled(_ on: Bool) {
+        guard on != enabled else { return }
+        enabled = on
+        if on { check() } else { availableVersion = nil }
+    }
 
     func start() {
         check()
@@ -21,6 +31,7 @@ final class UpdateChecker: ObservableObject {
     }
 
     private func check() {
+        guard enabled else { return }
         Task { [weak self] in
             let request = URLRequest(
                 url: UpdateCheck.latestReleaseURL(installID: InstallID.current))
