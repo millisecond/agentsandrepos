@@ -40,6 +40,10 @@ new menubar icon. To start it at login, enable **Start at login** in the
 app's Settings (a standard login item, visible in System Settings → General →
 Login Items).
 
+Heads up: the app phones home once a day to check for new releases; the
+request carries a random install UUID and nothing else — details under
+[Update check](#update-check) below.
+
 Or from a checkout:
 
 ```sh
