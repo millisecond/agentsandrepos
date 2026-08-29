@@ -143,3 +143,10 @@ clear events are also written to the unified log (subsystem
 - macOS 14+
 - Xcode toolchain only to build from source (the cask ships a prebuilt,
   Developer ID-signed and notarized app)
+
+## AI full disclosure
+
+This software is developed with **strong assistance from Claude Fable 5**
+(via Claude Code), with a human leading the ideas, design decisions, testing,
+and debugging. Fittingly, the app itself exists to watch Claude agents work —
+so it was largely built by the kind of agent it monitors.
