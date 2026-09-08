@@ -70,8 +70,25 @@ public enum GHClient {
                 ci: reduceCI(obj["statusCheckRollup"]),
                 failingChecks: failingCheckNames(obj["statusCheckRollup"]),
                 updatedAt: (obj["updatedAt"] as? String)
-                    .flatMap { try? Date($0, strategy: .iso8601) })
+                    .flatMap { try? Date($0, strategy: .iso8601) },
+                ciUpdatedAt: latestCheckDate(obj["statusCheckRollup"]))
         }
+    }
+
+    /// Newest timestamp across the rollup: CheckRuns carry `startedAt` /
+    /// `completedAt`, StatusContexts `createdAt`. Nil when no check has one.
+    static func latestCheckDate(_ any: Any?) -> Date? {
+        guard let items = any as? [[String: Any]] else { return nil }
+        var latest: Date?
+        for item in items {
+            for key in ["completedAt", "startedAt", "createdAt"] {
+                guard let raw = item[key] as? String,
+                    let date = try? Date(raw, strategy: .iso8601)
+                else { continue }
+                if latest.map({ date > $0 }) ?? true { latest = date }
+            }
+        }
+        return latest
     }
 
     /// Recent repo-level workflow runs (deploys, dispatches, scheduled jobs).

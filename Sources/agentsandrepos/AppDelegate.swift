@@ -3,6 +3,10 @@ import AppKit
 
 @MainActor
 protocol MenuActionDelegate: AnyObject {
+    /// Until first-run onboarding finishes, a left-click on the status item
+    /// toggles the welcome popover instead of the dashboard. Returns true
+    /// when the click was consumed that way.
+    func toggleOnboarding() -> Bool
     func menuOpened()
     func refreshNow()
     func searchFocused()
@@ -33,7 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let isFirstRun = ConfigStore.isFirstRun()
-        let config = ConfigStore.load()
+        // On first run nothing is written yet: only the welcome popover's
+        // Start or Skip persists the config. Until then the icon shows the
+        // welcome, not the dashboard, and quitting leaves no file so the
+        // welcome is back next launch instead of silently keeping defaults.
+        let config = isFirstRun ? AppConfig() : ConfigStore.load()
         statusController = StatusItemController(delegate: self)
 
         let actions = DashboardActions(delegate: self)
@@ -89,19 +97,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // First launch: ask where repos live, in a popover anchored to the
         // status item. The engine is already running on the default
-        // (~/Projects), so skipping just keeps that default. `--onboarding`
-        // forces the popover for dev walkthroughs; Start still saves for real.
+        // (~/Projects); Skip writes that default out, Start writes the
+        // choice. Clicking off hides the welcome, and the icon brings it
+        // back (not the dashboard) until one of those is pressed.
+        // `--onboarding` forces the popover for dev walkthroughs; Start
+        // still saves for real, Skip then leaves the saved file alone.
         if isFirstRun || CommandLine.arguments.contains("--onboarding") {
-            let controller = OnboardingPopoverController(config: config) { [weak self] newConfig in
-                guard let self else { return }
-                if let engine = self.engine {
-                    Task { await engine.updateConfig(newConfig) }
-                }
-                self.onboardingController?.close()
-                self.onboardingController = nil
-            }
-            controller.onClose = { [weak self] in self?.onboardingController = nil }
+            let controller = OnboardingPopoverController(
+                config: config,
+                onFinish: { [weak self] newConfig in
+                    guard let self else { return }
+                    if let engine = self.engine {
+                        Task { await engine.updateConfig(newConfig) }
+                    }
+                    self.onboardingController = nil
+                    self.statusController.setOnboarding(false)
+                },
+                onSkip: { [weak self] in
+                    guard let self else { return }
+                    if isFirstRun { ConfigStore.save(config) }
+                    self.onboardingController = nil
+                    self.statusController.setOnboarding(false)
+                })
             onboardingController = controller
+            statusController.setOnboarding(true)
             if let button = statusController.button {
                 controller.show(relativeTo: button)
             }
@@ -115,11 +134,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate: MenuActionDelegate {
+    func toggleOnboarding() -> Bool {
+        guard let onboardingController, let button = statusController.button else { return false }
+        onboardingController.toggle(relativeTo: button)
+        return true
+    }
+
     func menuOpened() {
-        // The dashboard anchors to the same status button; don't stack the
-        // welcome popover under it. Skipping this way keeps the defaults.
+        // Right-click menu: hide the welcome under it. Nothing is saved; the
+        // next icon click brings the welcome back.
         onboardingController?.close()
-        onboardingController = nil
         guard let engine else { return }
         Task { await engine.kickLight() }
     }

@@ -10,14 +10,16 @@ final class GHClientTests: XCTestCase {
                "isDraft": false, "author": {"login": "millisecond"}, "headRefName": "fix-onboarding",
                "reviewDecision": "APPROVED", "updatedAt": "2026-08-01T10:00:00Z",
                "statusCheckRollup": [
-                 {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS"},
-                 {"__typename": "StatusContext", "state": "SUCCESS"}
+                 {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS",
+                  "startedAt": "2026-08-01T11:00:00Z", "completedAt": "2026-08-01T11:20:00Z"},
+                 {"__typename": "StatusContext", "state": "SUCCESS", "createdAt": "2026-08-01T11:05:00Z"}
                ]},
               {"number": 13, "title": "WIP", "url": "https://github.com/o/r/pull/13",
                "isDraft": true, "author": {"login": "bot"}, "headRefName": "wip",
                "reviewDecision": null,
                "statusCheckRollup": [
-                 {"__typename": "CheckRun", "status": "IN_PROGRESS", "conclusion": null}
+                 {"__typename": "CheckRun", "status": "IN_PROGRESS", "conclusion": null,
+                  "startedAt": "2026-08-01T12:00:00Z", "completedAt": null}
                ]},
               {"number": 14, "title": "Broken", "url": "https://github.com/o/r/pull/14",
                "isDraft": false, "author": {"login": "x"}, "headRefName": "b",
@@ -43,6 +45,14 @@ final class GHClientTests: XCTestCase {
         XCTAssertEqual(prs[3].ci, .none)
         XCTAssertEqual(prs[0].updatedAt, Date(timeIntervalSince1970: 1_785_578_400))
         XCTAssertNil(prs[3].updatedAt)
+        // CI activity GitHub's updatedAt never reflects: the newest check
+        // timestamp wins, and lastActivity prefers it over a stale updatedAt.
+        XCTAssertEqual(prs[0].ciUpdatedAt, Date(timeIntervalSince1970: 1_785_583_200))
+        XCTAssertEqual(prs[0].lastActivity, prs[0].ciUpdatedAt)
+        XCTAssertEqual(prs[1].ciUpdatedAt, Date(timeIntervalSince1970: 1_785_585_600))
+        XCTAssertEqual(prs[1].lastActivity, prs[1].ciUpdatedAt)
+        XCTAssertNil(prs[3].ciUpdatedAt)
+        XCTAssertNil(prs[3].lastActivity)
     }
 
     func testParseGarbage() {

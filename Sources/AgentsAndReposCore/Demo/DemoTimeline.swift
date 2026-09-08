@@ -107,7 +107,10 @@ public enum DemoTimeline {
             isDraft: false, author: "casey", headRefName: "fix/flaky-ws",
             reviewDecision: nil, ci: ci,
             failingChecks: ci == .fail ? ["build (macos-14)"] : [],
-            updatedAt: now.addingTimeInterval(-300))
+            // 20 minutes, not 5: a running-CI PR earns an in-flight lift
+            // (AttentionScore.ciBoost), and at max recency it would outrank
+            // the featured repo's waiting agent and move the ⋯-menu target.
+            updatedAt: now.addingTimeInterval(-1200))
         let agent = AgentSession(
             pid: 84355, sessionId: "demo-flaky-tests",
             cwd: path, name: "flaky-tests", kind: "fg",

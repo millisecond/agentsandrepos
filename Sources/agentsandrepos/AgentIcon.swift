@@ -7,6 +7,8 @@ import AppKit
 ///   busy      uneven eyes (left half-height), echoing the tiles' activity bars
 ///   waiting   pause badge
 ///   error     dead × eyes — something is broken (fetch/status/CI)
+///   setup     even short eyes — not looking anywhere yet (first-run
+///             onboarding, before the user has said where repos live)
 /// All variants are template images so the menu bar recolors them.
 @MainActor
 enum AgentIcon {
@@ -14,11 +16,12 @@ enum AgentIcon {
     static let busy = make(.busy, description: "Agents busy")
     static let waiting = make(.waiting, description: "Agents waiting")
     static let error = make(.error, description: "Repo or PR errors")
+    static let setup = make(.setup, description: "Setting up")
     /// Head with no eyes — the dashboard's animated busy tile overlays its
     /// own moving eye bars on this base.
     static let eyeless = make(.eyeless, description: "Agent busy")
 
-    private enum Variant { case idle, busy, waiting, error, eyeless }
+    private enum Variant { case idle, busy, waiting, error, eyeless, setup }
 
     // Eye geometry in the 18×17 canvas (AppKit coordinates, bottom-left
     // origin), exported so the dashboard's animated eyes land exactly where
@@ -103,8 +106,9 @@ enum AgentIcon {
             cross.lineCapStyle = .round
             cross.stroke()
         } else {
-            let leftHeight = variant == .busy ? eyeShortHeight : eyeTallHeight
-            for (cx, height) in zip(eyeCentersX, [leftHeight, eyeTallHeight]) {
+            let leftHeight = (variant == .busy || variant == .setup) ? eyeShortHeight : eyeTallHeight
+            let rightHeight = variant == .setup ? eyeShortHeight : eyeTallHeight
+            for (cx, height) in zip(eyeCentersX, [leftHeight, rightHeight]) {
                 NSBezierPath(
                     roundedRect: NSRect(
                         x: cx - eyeWidth / 2, y: eyeBottomY, width: eyeWidth, height: height),

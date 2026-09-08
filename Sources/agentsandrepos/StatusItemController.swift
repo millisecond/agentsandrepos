@@ -26,6 +26,17 @@ final class StatusItemController: NSObject {
         }
     }
 
+    /// While first-run onboarding is unfinished the engine runs on an
+    /// unchosen default root, so its errors and counts aren't meaningful yet;
+    /// the icon stays on the neutral setup face until Start or Skip.
+    private var onboarding = false
+
+    func setOnboarding(_ active: Bool) {
+        guard onboarding != active else { return }
+        onboarding = active
+        update(snapshot: snapshot)
+    }
+
     /// Debug override for eyeballing status-item states without manufacturing
     /// the real condition: launch with AAR_FORCE_STATE=waiting|busy|error|idle.
     private let forcedState = ProcessInfo.processInfo.environment["AAR_FORCE_STATE"]
@@ -33,6 +44,11 @@ final class StatusItemController: NSObject {
     func update(snapshot: Snapshot) {
         self.snapshot = snapshot
         guard let button = statusItem.button else { return }
+        if onboarding {
+            if button.image !== AgentIcon.setup { button.image = AgentIcon.setup }
+            if button.title != "" { button.title = "" }
+            return
+        }
         let agents = snapshot.visibleAgents
         var waiting = agents.filter { $0.status.isWaiting }.count
         var busy = agents.filter { $0.status.isBusy }.count
@@ -82,6 +98,7 @@ final class StatusItemController: NSObject {
             sender.performClick(nil)
             statusItem.menu = nil
         } else {
+            if delegate?.toggleOnboarding() == true { return }
             guard let popoverController else { return }
             popoverController.toggle(relativeTo: sender)
             if popoverController.isShown { delegate?.menuOpened() }

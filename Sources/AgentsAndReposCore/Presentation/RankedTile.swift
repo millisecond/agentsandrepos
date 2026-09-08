@@ -31,6 +31,21 @@ public enum AttentionScore {
         }
     }
 
+    /// PRs with CI in flight or green are the GitHub-side things a person
+    /// is actually waiting on — to watch land, or to merge. Their severity
+    /// stays info/ok (that's the row color), but on severity alone every
+    /// dirty repo (info 30) buried them; this lifts them without repainting:
+    /// running 30+40 sits between attention and urgent, green 10+30 sits
+    /// above a dirty repo touched more than an hour ago.
+    static func ciBoost(_ ci: PullRequest.CIStatus, isDraft: Bool) -> Double {
+        guard !isDraft else { return 0 }
+        switch ci {
+        case .pending: return 40
+        case .pass: return 30
+        case .fail, .none: return 0
+        }
+    }
+
     public static func score(severity: TileSeverity, lastActivity: Date?, now: Date) -> Double {
         base(severity) + recency(lastActivity, now: now)
     }
@@ -72,7 +87,9 @@ public enum RankedTile: Sendable, Equatable, Identifiable {
     }
 
     public func score(now: Date) -> Double {
-        AttentionScore.score(severity: severity, lastActivity: lastActivity, now: now)
+        var s = AttentionScore.score(severity: severity, lastActivity: lastActivity, now: now)
+        if case .pr(let p) = self { s += AttentionScore.ciBoost(p.ci, isDraft: p.isDraft) }
+        return s
     }
 }
 

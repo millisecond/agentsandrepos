@@ -489,7 +489,8 @@ public struct PRTileState: Sendable, Equatable, Identifiable {
     public let severity: TileSeverity
     public let statusLabel: String
     public let url: String
-    /// Drives recency sorting; not rendered.
+    /// Last activity including CI (see `PullRequest.lastActivity`) — drives
+    /// recency sorting and the trailing "ago" stamp.
     public let updatedAt: Date?
 
     public init(pr: PullRequest, repoName: String) {
@@ -505,7 +506,7 @@ public struct PRTileState: Sendable, Equatable, Identifiable {
         self.url = pr.url
         self.severity = Self.severity(pr)
         self.statusLabel = Self.statusLabel(pr)
-        self.updatedAt = pr.updatedAt
+        self.updatedAt = pr.lastActivity
     }
 
     /// Precedence: CI fail → urgent > changes requested → attention >
