@@ -99,7 +99,7 @@ public enum GHClient {
         let args = [
             "run", "list", "--repo", ownerRepo, "--limit", "10",
             "--json",
-            "databaseId,workflowName,displayTitle,status,conclusion,headBranch,event,url,updatedAt",
+            "databaseId,workflowName,displayTitle,status,conclusion,headBranch,event,url,updatedAt,startedAt",
         ]
         let r = await ProcessRunner.run(
             ghPath, args, environment: environment(ghPath: ghPath), timeout: 25)
@@ -125,6 +125,8 @@ public enum GHClient {
             if event.hasPrefix("pull_request") { continue }
             let updatedAt = (obj["updatedAt"] as? String)
                 .flatMap { try? Date($0, strategy: .iso8601) }
+            let startedAt = (obj["startedAt"] as? String)
+                .flatMap { try? Date($0, strategy: .iso8601) }
             let state = reduceRun(
                 status: obj["status"] as? String, conclusion: obj["conclusion"] as? String)
             if state != .running, (updatedAt ?? .distantPast) < cutoff { continue }
@@ -139,7 +141,8 @@ public enum GHClient {
                     event: event,
                     state: state,
                     url: url,
-                    updatedAt: updatedAt))
+                    updatedAt: updatedAt,
+                    startedAt: startedAt))
         }
         return runs
     }

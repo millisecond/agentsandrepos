@@ -82,7 +82,7 @@ final class GHClientTests: XCTestCase {
               {"databaseId": 4, "workflowName": "Nightly", "displayTitle": "cron",
                "status": "completed", "conclusion": "failure", "headBranch": "main",
                "event": "schedule", "url": "https://github.com/o/r/actions/runs/4",
-               "updatedAt": "2026-08-07T11:45:00Z"},
+               "updatedAt": "2026-08-07T11:45:00Z", "startedAt": "2026-08-07T11:30:00Z"},
               {"databaseId": 5, "workflowName": "Stale", "displayTitle": "old",
                "status": "completed", "conclusion": "success", "headBranch": "main",
                "event": "push", "url": "https://github.com/o/r/actions/runs/5",
@@ -95,6 +95,8 @@ final class GHClientTests: XCTestCase {
         XCTAssertEqual(runs[0].state, .running)
         XCTAssertEqual(runs[0].workflowName, "Deploy")
         XCTAssertEqual(runs[1].state, .failed)
+        XCTAssertNil(runs[0].duration, "still running")
+        XCTAssertEqual(runs[1].duration, 900, "startedAt → updatedAt")
     }
 
     func testParseRunListGarbage() {

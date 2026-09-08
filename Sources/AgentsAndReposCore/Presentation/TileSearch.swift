@@ -42,11 +42,11 @@ extension AgentTileState {
 
 extension RepoTileState {
     /// Identity plus in-flight context: branch, changed file paths, the tasks
-    /// of agents working here, failing-PR title, and workflow-run names.
+    /// of agents working here, and workflow-run names. PR titles are the PR
+    /// tile's own search fields — a failing PR lives on its own row.
     public var searchFields: [String] {
         var fields = [name, branch, path]
         if let githubRepo { fields.append(githubRepo) }
-        if let failingPR { fields.append(failingPR.title) }
         fields += agentTasks
         fields += changedPaths
         for run in runs {

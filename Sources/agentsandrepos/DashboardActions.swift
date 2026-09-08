@@ -61,6 +61,9 @@ final class DashboardActions {
     func setSectionExpanded(_ section: DashboardSection, expanded: Bool) {
         delegate?.setSectionExpanded(section: section, expanded: expanded)
     }
+    func enableNotifications() { delegate?.setNotificationsEnabled(true) }
+    func dismissNotificationsPrompt() { delegate?.dismissNotificationsPrompt() }
+    func noteNotificationsPromptShown() { delegate?.noteNotificationsPromptShown() }
     func refreshNow() { delegate?.refreshNow() }
     func searchFocused() { delegate?.searchFocused() }
     func togglePRScope() { delegate?.togglePRScope() }

@@ -4,7 +4,7 @@ import Foundation
 /// pushes). Runs triggered by `pull_request` events are excluded upstream —
 /// those already surface as PR CI status.
 public struct WorkflowRun: Sendable, Equatable, Identifiable {
-    public enum State: String, Sendable {
+    public enum State: String, Sendable, Codable {
         /// queued / in_progress / waiting
         case running
         case passed
@@ -32,10 +32,24 @@ public struct WorkflowRun: Sendable, Equatable, Identifiable {
     public let state: State
     public let url: String
     public let updatedAt: Date?
+    /// When the run began executing (nil for queued runs or older snapshots).
+    /// With `updatedAt`, gives a finished run's duration — the surprise
+    /// scorer's "error bars" for how long this workflow usually takes.
+    public let startedAt: Date?
+
+    /// Wall-clock length of a finished run; nil while running or when the
+    /// API didn't say when it started.
+    public var duration: TimeInterval? {
+        guard state == .passed || state == .failed, let startedAt, let updatedAt else {
+            return nil
+        }
+        let d = updatedAt.timeIntervalSince(startedAt)
+        return d > 0 ? d : nil
+    }
 
     public init(
         id: Int, workflowName: String, title: String, branch: String, event: String,
-        state: State, url: String, updatedAt: Date? = nil
+        state: State, url: String, updatedAt: Date? = nil, startedAt: Date? = nil
     ) {
         self.id = id
         self.workflowName = workflowName
@@ -45,6 +59,7 @@ public struct WorkflowRun: Sendable, Equatable, Identifiable {
         self.state = state
         self.url = url
         self.updatedAt = updatedAt
+        self.startedAt = startedAt
     }
 
     /// fail > running > pass > other — mirror of `RepoTileState.worstCI`.

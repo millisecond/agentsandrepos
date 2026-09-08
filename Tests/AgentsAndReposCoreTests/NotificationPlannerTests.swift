@@ -1,0 +1,422 @@
+import XCTest
+
+@testable import AgentsAndReposCore
+
+final class NotificationPlannerTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+
+    private func run(
+        id: Int, state: WorkflowRun.State, updatedAt: Date? = nil, name: String = "CI"
+    ) -> WorkflowRun {
+        WorkflowRun(
+            id: id, workflowName: name, title: "commit subject", branch: "main",
+            event: "push", state: state, url: "https://github.com/o/r/actions/runs/\(id)",
+            updatedAt: updatedAt)
+    }
+
+    private func repoOverview(
+        path: String = "/p/app", runs: [WorkflowRun] = [], agents: [AgentSession] = []
+    ) -> RepoOverview {
+        RepoOverview(
+            repo: Repo(path: path, name: (path as NSString).lastPathComponent, root: "/p"),
+            git: nil, agents: agents, prs: [], worktrees: [], githubRepo: "o/r", runs: runs)
+    }
+
+    private func snapshot(
+        repos: [RepoOverview] = [], otherAgents: [AgentSession] = [],
+        config: AppConfig = {
+            var c = AppConfig()
+            c.notificationsEnabled = true
+            return c
+        }()
+    ) -> Snapshot {
+        Snapshot(
+            repos: repos, otherAgents: otherAgents, ghAvailability: .ok,
+            lastFetchAt: nil, config: config, generatedAt: t0)
+    }
+
+    private func waitingAgent(
+        id: String = "s1", updatedAt: Date?, what: String? = "permission"
+    ) -> AgentSession {
+        AgentSession(
+            pid: 100, sessionId: id, cwd: "/p/app", name: "fixer", kind: "interactive",
+            status: .waiting(what), startedAt: nil, updatedAt: updatedAt)
+    }
+
+    // MARK: - Workflow runs
+
+    func testFirstIngestIsBaselineOnly() {
+        var p = NotificationPlanner()
+        let snap = snapshot(repos: [
+            repoOverview(runs: [run(id: 1, state: .failed, updatedAt: t0)])
+        ])
+        XCTAssertTrue(p.ingest(snap, now: t0).isEmpty)
+        // Same completed run again: still nothing.
+        XCTAssertTrue(p.ingest(snap, now: t0.addingTimeInterval(30)).isEmpty)
+    }
+
+    func testRunningToCompletedNotifiesOnce() {
+        var p = NotificationPlanner()
+        _ = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .running)])]), now: t0)
+        let done = snapshot(repos: [
+            repoOverview(runs: [run(id: 1, state: .passed, updatedAt: t0)])
+        ])
+        let notes = p.ingest(done, now: t0.addingTimeInterval(60)).post
+        XCTAssertEqual(notes.count, 1)
+        XCTAssertEqual(notes[0].kind, .actionPassed)
+        XCTAssertTrue(notes[0].title.contains("passed"))
+        XCTAssertTrue(notes[0].body.contains("app"))
+        XCTAssertEqual(notes[0].target, .url("https://github.com/o/r/actions/runs/1"))
+        XCTAssertEqual(notes[0].expiresAfter, NotificationPlanner.runAlertDuration)
+        // Re-ingesting the completed run stays quiet.
+        XCTAssertTrue(p.ingest(done, now: t0.addingTimeInterval(120)).isEmpty)
+    }
+
+    func testRunningToFailedNotifiesAsFailure() {
+        var p = NotificationPlanner()
+        _ = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .running)])]), now: t0)
+        let notes = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .failed, updatedAt: t0)])]),
+            now: t0.addingTimeInterval(60)
+        ).post
+        XCTAssertEqual(notes.map(\.kind), [.actionFailed])
+    }
+
+    func testRerunWithdrawsTheStaleResultAlert() {
+        var p = NotificationPlanner()
+        _ = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .running)])]), now: t0)
+        _ = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .failed, updatedAt: t0)])]),
+            now: t0.addingTimeInterval(60))
+        // Re-run: same run id back to running — the failure alert is stale.
+        let plan = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .running)])]),
+            now: t0.addingTimeInterval(120))
+        XCTAssertEqual(plan.post, [])
+        XCTAssertEqual(plan.withdraw, ["run-/p/app#1"])
+        // And its second completion notifies again.
+        let notes = p.ingest(
+            snapshot(repos: [
+                repoOverview(runs: [
+                    run(id: 1, state: .passed, updatedAt: t0.addingTimeInterval(300))
+                ])
+            ]),
+            now: t0.addingTimeInterval(300)
+        ).post
+        XCTAssertEqual(notes.map(\.kind), [.actionPassed])
+    }
+
+    func testUnseenRunThatFinishedRecentlyNotifies() {
+        var p = NotificationPlanner()
+        _ = p.ingest(snapshot(repos: [repoOverview()]), now: t0)
+        // A short run started and finished between sweeps.
+        let notes = p.ingest(
+            snapshot(repos: [
+                repoOverview(runs: [
+                    run(id: 2, state: .passed, updatedAt: t0.addingTimeInterval(240))
+                ])
+            ]),
+            now: t0.addingTimeInterval(300)
+        ).post
+        XCTAssertEqual(notes.count, 1)
+    }
+
+    func testUnseenOldCompletedRunIsHistory() {
+        var p = NotificationPlanner()
+        _ = p.ingest(snapshot(repos: [repoOverview()]), now: t0)
+        let plan = p.ingest(
+            snapshot(repos: [
+                repoOverview(runs: [
+                    run(id: 2, state: .failed, updatedAt: t0.addingTimeInterval(-7200))
+                ])
+            ]),
+            now: t0.addingTimeInterval(300))
+        XCTAssertTrue(plan.isEmpty)
+    }
+
+    func testGitActionsToggleSuppressesButKeepsTracking() {
+        var off = {
+            var c = AppConfig()
+            c.notificationsEnabled = true
+            c.notifyGitActions = false
+            return c
+        }()
+        var p = NotificationPlanner()
+        _ = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .running)])], config: off),
+            now: t0)
+        // Completes while the toggle is off: no note.
+        XCTAssertTrue(
+            p.ingest(
+                snapshot(
+                    repos: [repoOverview(runs: [run(id: 1, state: .passed, updatedAt: t0)])],
+                    config: off),
+                now: t0.addingTimeInterval(60)
+            ).isEmpty)
+        // Toggle back on: the already-completed run must not replay.
+        off.notifyGitActions = true
+        XCTAssertTrue(
+            p.ingest(
+                snapshot(
+                    repos: [repoOverview(runs: [run(id: 1, state: .passed, updatedAt: t0)])],
+                    config: off),
+                now: t0.addingTimeInterval(120)
+            ).isEmpty)
+    }
+
+    func testIgnoredRepoRunsAreSkipped() {
+        var config = AppConfig()
+        config.notificationsEnabled = true
+        config.ignoredRepos = ["/p/app"]
+        var p = NotificationPlanner()
+        _ = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .running)])], config: config),
+            now: t0)
+        let plan = p.ingest(
+            snapshot(
+                repos: [repoOverview(runs: [run(id: 1, state: .passed, updatedAt: t0)])],
+                config: config),
+            now: t0.addingTimeInterval(60))
+        XCTAssertTrue(plan.isEmpty)
+    }
+
+    // MARK: - Waiting agents
+
+    func testWaitingUnderThresholdStaysQuiet() {
+        var p = NotificationPlanner()
+        let snap = snapshot(repos: [
+            repoOverview(agents: [waitingAgent(updatedAt: t0)])
+        ])
+        XCTAssertTrue(p.ingest(snap, now: t0.addingTimeInterval(60)).isEmpty)
+    }
+
+    func testWaitingPastThresholdNotifiesOnce() {
+        var p = NotificationPlanner()
+        let snap = snapshot(repos: [
+            repoOverview(agents: [waitingAgent(updatedAt: t0)])
+        ])
+        _ = p.ingest(snap, now: t0.addingTimeInterval(60))
+        let notes = p.ingest(snap, now: t0.addingTimeInterval(301)).post
+        XCTAssertEqual(notes.count, 1)
+        XCTAssertEqual(notes[0].kind, .agentWaiting)
+        XCTAssertTrue(notes[0].title.contains("fixer"))
+        XCTAssertTrue(notes[0].body.contains("permission"))
+        XCTAssertEqual(notes[0].target, .agent(pid: 100, cwd: "/p/app"))
+        XCTAssertEqual(notes[0].expiresAfter, NotificationPlanner.waitingAlertDuration)
+        // Still waiting: no repeat.
+        XCTAssertTrue(p.ingest(snap, now: t0.addingTimeInterval(600)).isEmpty)
+    }
+
+    func testAlreadyLongWaitingAtLaunchNotifiesImmediately() {
+        var p = NotificationPlanner()
+        // updatedAt says it entered waiting 20 minutes before our first look.
+        let snap = snapshot(repos: [
+            repoOverview(agents: [waitingAgent(updatedAt: t0.addingTimeInterval(-1200))])
+        ])
+        XCTAssertEqual(p.ingest(snap, now: t0).post.count, 1)
+    }
+
+    func testWaitResolutionWithdrawsTheAlert() {
+        var p = NotificationPlanner()
+        let waiting = snapshot(repos: [repoOverview(agents: [waitingAgent(updatedAt: t0)])])
+        _ = p.ingest(waiting, now: t0)
+        XCTAssertEqual(p.ingest(waiting, now: t0.addingTimeInterval(301)).post.count, 1)
+
+        // Approved: session goes busy — the alert's cause is gone.
+        let busy = snapshot(repos: [
+            repoOverview(agents: [
+                AgentSession(
+                    pid: 100, sessionId: "s1", cwd: "/p/app", name: "fixer",
+                    kind: "interactive", status: .busy, startedAt: nil,
+                    updatedAt: t0.addingTimeInterval(400))
+            ])
+        ])
+        let plan = p.ingest(busy, now: t0.addingTimeInterval(400))
+        XCTAssertEqual(plan.post, [])
+        XCTAssertEqual(plan.withdraw, ["wait-s1"])
+        // No repeated withdrawal on the next tick.
+        XCTAssertTrue(p.ingest(busy, now: t0.addingTimeInterval(403)).isEmpty)
+    }
+
+    func testLeavingWaitingResetsTheCycle() {
+        var p = NotificationPlanner()
+        let waiting = snapshot(repos: [repoOverview(agents: [waitingAgent(updatedAt: t0)])])
+        _ = p.ingest(waiting, now: t0)
+        XCTAssertEqual(p.ingest(waiting, now: t0.addingTimeInterval(301)).post.count, 1)
+
+        // Approved: session goes busy.
+        let busy = snapshot(repos: [
+            repoOverview(agents: [
+                AgentSession(
+                    pid: 100, sessionId: "s1", cwd: "/p/app", name: "fixer",
+                    kind: "interactive", status: .busy, startedAt: nil,
+                    updatedAt: t0.addingTimeInterval(400))
+            ])
+        ])
+        _ = p.ingest(busy, now: t0.addingTimeInterval(400))
+
+        // Waits again: fresh threshold, fresh notification.
+        let rewaiting = snapshot(repos: [
+            repoOverview(agents: [waitingAgent(updatedAt: t0.addingTimeInterval(500))])
+        ])
+        XCTAssertTrue(p.ingest(rewaiting, now: t0.addingTimeInterval(550)).isEmpty)
+        XCTAssertEqual(p.ingest(rewaiting, now: t0.addingTimeInterval(801)).post.count, 1)
+    }
+
+    func testIgnoredAgentsAreSkipped() {
+        var config = AppConfig()
+        config.notificationsEnabled = true
+        config.ignoredAgents = ["s1"]
+        var p = NotificationPlanner()
+        let snap = snapshot(
+            repos: [repoOverview(agents: [waitingAgent(updatedAt: t0.addingTimeInterval(-1200))])],
+            config: config)
+        XCTAssertTrue(p.ingest(snap, now: t0).isEmpty)
+    }
+
+    func testWaitingToggleSuppresses() {
+        var config = AppConfig()
+        config.notificationsEnabled = true
+        config.notifyWaitingAgents = false
+        var p = NotificationPlanner()
+        let snap = snapshot(
+            repos: [repoOverview(agents: [waitingAgent(updatedAt: t0.addingTimeInterval(-1200))])],
+            config: config)
+        XCTAssertTrue(p.ingest(snap, now: t0).isEmpty)
+    }
+
+    func testOtherAgentsAreCoveredToo() {
+        var p = NotificationPlanner()
+        let snap = snapshot(otherAgents: [waitingAgent(updatedAt: t0.addingTimeInterval(-1200))])
+        XCTAssertEqual(p.ingest(snap, now: t0).post.count, 1)
+    }
+
+    // MARK: - Surprise tiers
+
+    /// Runs `states` through a planner as successive finishes of the same
+    /// workflow (running → finished each time), returning what got posted.
+    private func finishes(
+        _ states: [WorkflowRun.State], planner p: inout NotificationPlanner
+    ) -> [PlannedNotification?] {
+        var posted: [PlannedNotification?] = []
+        var t = t0
+        for (i, state) in states.enumerated() {
+            let id = 100 + i
+            _ = p.ingest(
+                snapshot(repos: [repoOverview(runs: [run(id: id, state: .running)])]), now: t)
+            t = t.addingTimeInterval(600)
+            let plan = p.ingest(
+                snapshot(repos: [repoOverview(runs: [run(id: id, state: state, updatedAt: t)])]),
+                now: t)
+            XCTAssertEqual(plan.scored.count, 1, "every finish is scored")
+            posted.append(plan.post.first)
+            t = t.addingTimeInterval(3000)
+        }
+        return posted
+    }
+
+    func testFirstSightIsFullAlertThenRoutinePassesGoQuiet() {
+        var p = NotificationPlanner()
+        let posted = finishes([.passed, .passed, .passed, .passed, .passed, .passed, .passed],
+                              planner: &p)
+        // 1st: news. 2nd–3rd: swallowed. 4th: roundup. 5th–6th swallowed. 7th: roundup.
+        XCTAssertEqual(posted.map { $0 != nil }, [true, false, false, true, false, false, true])
+        let first = posted[0]!
+        XCTAssertEqual(first.tier, .extreme)
+        XCTAssertEqual(first.subtitle, "first CI run seen")
+        XCTAssertEqual(first.expiresAfter, NotificationPlanner.runAlertDuration)
+        XCTAssertFalse(first.playsSound, "passes never make a sound")
+        let roundup = posted[3]!
+        XCTAssertEqual(roundup.tier, .normal)
+        XCTAssertEqual(roundup.subtitle, "still green, 4th pass in a row")
+        XCTAssertEqual(roundup.expiresAfter, NotificationPlanner.quietRunAlertDuration)
+        XCTAssertFalse(roundup.playsSound)
+        XCTAssertEqual(posted[6]!.subtitle, "still green, 7th pass in a row")
+    }
+
+    func testFirstFailureShoutsRepeatsWhisperThenHush() {
+        var p = NotificationPlanner()
+        let posted = finishes([.passed, .passed, .failed, .failed, .failed, .passed],
+                              planner: &p)
+        XCTAssertEqual(posted.map { $0 != nil }, [true, false, true, true, false, true])
+        let flip = posted[2]!
+        XCTAssertEqual(flip.kind, .actionFailed)
+        XCTAssertEqual(flip.tier, .extreme)
+        XCTAssertTrue(flip.playsSound)
+        XCTAssertEqual(flip.subtitle, "first failure after 2 passes")
+        let again = posted[3]!
+        XCTAssertEqual(again.tier, .unusual)
+        XCTAssertFalse(again.playsSound, "a repeat failure is a quiet line")
+        XCTAssertEqual(again.subtitle, "2nd failure in a row")
+        XCTAssertEqual(again.expiresAfter, NotificationPlanner.quietRunAlertDuration)
+        let green = posted[5]!
+        XCTAssertEqual(green.tier, .extreme)
+        XCTAssertEqual(green.subtitle, "back to green after 3 failures")
+        XCTAssertFalse(green.playsSound)
+    }
+
+    func testSwallowedRunsStillMaintainTheWithdrawBookkeeping() {
+        var p = NotificationPlanner()
+        _ = finishes([.passed, .passed], planner: &p)
+        // The second pass was swallowed, so a re-run must not withdraw a
+        // notification that never existed.
+        let plan = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 101, state: .running)])]),
+            now: t0.addingTimeInterval(9000))
+        XCTAssertTrue(plan.isEmpty)
+    }
+
+    func testBeliefsPersistAcrossResetAndRelaunch() {
+        var p = NotificationPlanner()
+        _ = finishes([.passed, .passed], planner: &p)
+        let saved = p.takeDirtyBeliefs()
+        XCTAssertNotNil(saved)
+        XCTAssertNil(p.takeDirtyBeliefs(), "clean until the next finish")
+        XCTAssertEqual(saved?["o/r#CI"]?.streak, 2)
+
+        // Toggling notifications off/on forgets transitions but not knowledge.
+        p.reset()
+        XCTAssertEqual(p.beliefs, saved)
+
+        // A "relaunch" seeded from disk: the next routine pass is not news.
+        var fresh = NotificationPlanner(beliefs: saved!)
+        let posted = finishes([.passed], planner: &fresh)
+        XCTAssertEqual(posted, [nil])
+        XCTAssertEqual(fresh.beliefs["o/r#CI"]?.streak, 3)
+    }
+
+    func testBeliefKeyPrefersGitHubRepoOverPath() {
+        let gh = repoOverview(path: "/p/app")
+        XCTAssertEqual(NotificationPlanner.beliefKey(repo: gh, workflow: "CI"), "o/r#CI")
+        let local = RepoOverview(
+            repo: Repo(path: "/p/local", name: "local", root: "/p"), git: nil, agents: [],
+            prs: [], worktrees: [], githubRepo: nil)
+        XCTAssertEqual(NotificationPlanner.beliefKey(repo: local, workflow: "CI"), "/p/local#CI")
+    }
+
+    func testWaitingAgentsAlwaysKeepTheirLine() {
+        var p = NotificationPlanner()
+        let snap = snapshot(repos: [
+            repoOverview(agents: [waitingAgent(updatedAt: t0.addingTimeInterval(-1200))])
+        ])
+        let note = p.ingest(snap, now: t0).post[0]
+        XCTAssertEqual(note.tier, .extreme)
+        XCTAssertTrue(note.playsSound)
+        XCTAssertNil(note.subtitle)
+    }
+
+    func testResetReprimes() {
+        var p = NotificationPlanner()
+        _ = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .running)])]), now: t0)
+        p.reset()
+        // After reset, the completed run is baseline, not a transition.
+        let plan = p.ingest(
+            snapshot(repos: [repoOverview(runs: [run(id: 1, state: .passed, updatedAt: t0)])]),
+            now: t0.addingTimeInterval(60))
+        XCTAssertTrue(plan.isEmpty)
+    }
+}

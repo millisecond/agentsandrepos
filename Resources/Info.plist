@@ -22,6 +22,8 @@
     <string>APPL</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSUserNotificationAlertStyle</key>
+    <string>alert</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Agents &amp; Repos focuses the terminal window running a Claude agent when you click its tile.</string>
     <key>NSHighResolutionCapable</key>
