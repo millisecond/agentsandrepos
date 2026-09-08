@@ -80,10 +80,34 @@ final class TranscriptTaskReaderTests: XCTestCase {
 
     func testCleanCollapsesWhitespaceAndTruncates() {
         XCTAssertEqual(TranscriptTaskReader.clean("a  b\n\n c\t d"), "a b c d")
+        // Search-form text keeps well past the tile size…
         let long = String(repeating: "x", count: 500)
-        let cleaned = TranscriptTaskReader.clean(long)
-        XCTAssertEqual(cleaned.count, TranscriptTaskReader.maxPromptChars + 1)
+        XCTAssertEqual(TranscriptTaskReader.clean(long), long)
+        // …but is still bounded so a pathological paste can't bloat snapshots.
+        let huge = String(repeating: "x", count: TranscriptTaskReader.maxHistoryChars + 100)
+        let cleaned = TranscriptTaskReader.clean(huge)
+        XCTAssertEqual(cleaned.count, TranscriptTaskReader.maxHistoryChars + 1)
         XCTAssertTrue(cleaned.hasSuffix("…"))
+        // The headline form stays one-line-tile short.
+        let headline = TranscriptTaskReader.headline(long)
+        XCTAssertEqual(headline.count, TranscriptTaskReader.maxPromptChars + 1)
+        XCTAssertTrue(headline.hasSuffix("…"))
+    }
+
+    func testHeadlineTruncatedButHistoryKeepsFullText() {
+        let longAsk = "please " + String(repeating: "really ", count: 60) + "fix it"
+        let chunk = Data((userLine(longAsk) + "\n"
+            + assistantLine(#"{"type":"text","text":"on it"}"#) + "\n").utf8)
+        let task = TranscriptTaskReader.lastMessages(in: chunk)
+        XCTAssertEqual(
+            task.lastUserMessage,
+            String(longAsk.prefix(TranscriptTaskReader.maxPromptChars)) + "…")
+        XCTAssertEqual(task.history.first?.text, longAsk)
+        // Incremental appends truncate headlines the same way.
+        let appended = TranscriptTaskReader.appended(
+            to: AgentTask(), parsing: chunk)
+        XCTAssertEqual(appended.lastUserMessage, task.lastUserMessage)
+        XCTAssertEqual(appended.history.first?.text, longAsk)
     }
 
     // MARK: - Assistant lines
@@ -201,6 +225,83 @@ final class TranscriptTaskReaderTests: XCTestCase {
         XCTAssertEqual(task.lastUserMessage, "deep buried ask")
         XCTAssertEqual(task.lastAgentMessage, "still churning")
         XCTAssertFalse(task.userSpokeLast)
+    }
+
+    // MARK: - History
+
+    func testHistoryCollectedOldestFirstAndCapped() {
+        var body = ""
+        for i in 1...(TranscriptTaskReader.historyLimit + 5) {
+            body += userLine("ask \(i)") + "\n"
+            body += assistantLine("{\"type\":\"text\",\"text\":\"reply \(i)\"}") + "\n"
+        }
+        let task = TranscriptTaskReader.lastMessages(in: Data(body.utf8))
+        XCTAssertEqual(task.history.count, TranscriptTaskReader.historyLimit)
+        // Newest at the end, window covering the most recent messages.
+        XCTAssertEqual(task.history.last?.text, "reply \(TranscriptTaskReader.historyLimit + 5)")
+        XCTAssertEqual(task.history.last?.role, .agent)
+        XCTAssertEqual(task.lastUserMessage, "ask \(TranscriptTaskReader.historyLimit + 5)")
+    }
+
+    func testHeadlineSlotsOutliveHistoryWindow() {
+        // An assistant streak longer than the window must not lose the last
+        // human prompt behind it.
+        var body = userLine("the buried ask") + "\n"
+        for i in 1...(TranscriptTaskReader.historyLimit + 3) {
+            body += assistantLine("{\"type\":\"text\",\"text\":\"step \(i)\"}") + "\n"
+        }
+        let task = TranscriptTaskReader.lastMessages(in: Data(body.utf8))
+        XCTAssertEqual(task.lastUserMessage, "the buried ask")
+        XCTAssertEqual(task.history.count, TranscriptTaskReader.historyLimit)
+        XCTAssertTrue(task.history.allSatisfy { $0.role == .agent })
+    }
+
+    func testAppendedMergesAndTrims() {
+        let prev = AgentTask(
+            lastUserMessage: "old ask", lastAgentMessage: "old reply", userSpokeLast: false,
+            history: [
+                TranscriptMessage(role: .user, text: "old ask"),
+                TranscriptMessage(role: .agent, text: "old reply"),
+            ])
+        let appended = Data(
+            (userLine("new ask") + "\n"
+                + assistantLine("{\"type\":\"text\",\"text\":\"new reply\"}") + "\n").utf8)
+        let task = TranscriptTaskReader.appended(to: prev, parsing: appended)
+        XCTAssertEqual(task.lastUserMessage, "new ask")
+        XCTAssertEqual(task.lastAgentMessage, "new reply")
+        XCTAssertFalse(task.userSpokeLast)
+        XCTAssertEqual(task.history.map(\.text), ["old ask", "old reply", "new ask", "new reply"])
+
+        // Tool-result-only appends change nothing.
+        let noise = Data(
+            #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"ok"}]}}"#
+                .utf8)
+        XCTAssertEqual(TranscriptTaskReader.appended(to: task, parsing: noise), task)
+    }
+
+    func testIncrementalReadPicksUpAppendedMessages() throws {
+        let home = NSTemporaryDirectory() + "ttr-\(UUID().uuidString)"
+        let dir = home + "/.claude/projects/-x"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let path = dir + "/sess.jsonl"
+        try (userLine("first ask") + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+
+        let first = TranscriptTaskReader.read(cwd: "/x", sessionId: "sess", home: home)
+        XCTAssertEqual(first.lastUserMessage, "first ask")
+
+        // Append (with a changed mtime) and re-read: history holds both.
+        let fh = FileHandle(forWritingAtPath: path)!
+        fh.seekToEndOfFile()
+        fh.write(Data((assistantLine("{\"type\":\"text\",\"text\":\"on it\"}") + "\n").utf8))
+        try fh.close()
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(2)], ofItemAtPath: path)
+
+        let second = TranscriptTaskReader.read(cwd: "/x", sessionId: "sess", home: home)
+        XCTAssertEqual(second.lastUserMessage, "first ask")
+        XCTAssertEqual(second.lastAgentMessage, "on it")
+        XCTAssertEqual(second.history.map(\.text), ["first ask", "on it"])
+        XCTAssertFalse(second.userSpokeLast)
     }
 
     // MARK: - Plan integration

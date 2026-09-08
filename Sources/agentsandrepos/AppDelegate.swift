@@ -5,6 +5,7 @@ import AppKit
 protocol MenuActionDelegate: AnyObject {
     func menuOpened()
     func refreshNow()
+    func searchFocused()
     func togglePRScope()
     func toggleAutoFetch()
     func fetchRepo(path: String)
@@ -24,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var demoDriver: DemoDriver?
     private var statusController: StatusItemController!
     private var settingsController: SettingsWindowController?
+    private var onboardingController: OnboardingPopoverController?
     private var watcher: DirectoryWatcher?
     private var lastSnapshot: Snapshot = .empty
     private let store = SnapshotStore()
@@ -34,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popoverController: DashboardPopoverController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let isFirstRun = ConfigStore.isFirstRun()
         let config = ConfigStore.load()
         statusController = StatusItemController(delegate: self)
 
@@ -54,6 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Gate before start(): the launch check must respect a saved opt-out.
+        updateChecker.setEnabled(config.checkForUpdates)
         updateChecker.start()
         perfMonitor.start()
         notifications = NotificationCoordinator()
@@ -69,6 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.store.update(snap)
                 self.statusController.update(snapshot: snap)
                 self.summaryService.update(snapshot: snap)
+                // Snapshots carry config, so Settings saves land here.
+                self.updateChecker.setEnabled(snap.config.checkForUpdates)
                 self.notifications?.ingest(snap)
             }
         }
@@ -89,6 +96,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(didWake(_:)),
             name: NSWorkspace.didWakeNotification, object: nil)
+
+        // First launch: ask where repos live, in a popover anchored to the
+        // status item. The engine is already running on the default
+        // (~/Projects), so skipping just keeps that default. `--onboarding`
+        // forces the popover for dev walkthroughs; Start still saves for real.
+        if isFirstRun || CommandLine.arguments.contains("--onboarding") {
+            let controller = OnboardingPopoverController(config: config) { [weak self] newConfig in
+                guard let self else { return }
+                if let engine = self.engine {
+                    Task { await engine.updateConfig(newConfig) }
+                }
+                self.onboardingController?.close()
+                self.onboardingController = nil
+            }
+            controller.onClose = { [weak self] in self?.onboardingController = nil }
+            onboardingController = controller
+            if let button = statusController.button {
+                controller.show(relativeTo: button)
+            }
+        }
     }
 
     @objc private func didWake(_ notification: Notification) {
@@ -99,6 +126,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: MenuActionDelegate {
     func menuOpened() {
+        // The dashboard anchors to the same status button; don't stack the
+        // welcome popover under it. Skipping this way keeps the defaults.
+        onboardingController?.close()
+        onboardingController = nil
         guard let engine else { return }
         Task { await engine.kickLight() }
     }
@@ -106,6 +137,11 @@ extension AppDelegate: MenuActionDelegate {
     func refreshNow() {
         guard let engine else { return }
         Task { await engine.kickAll() }
+    }
+
+    func searchFocused() {
+        guard let engine else { return }
+        Task { await engine.kickSearch() }
     }
 
     func togglePRScope() {

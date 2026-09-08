@@ -6,6 +6,12 @@ public enum ConfigStore {
             .appendingPathComponent(".config/agentsandrepos/config.json")
     }
 
+    /// True until the config file exists — i.e. the app has never run before.
+    /// Must be checked before `load()`, which creates the default file.
+    public static func isFirstRun(url: URL = configURL) -> Bool {
+        !FileManager.default.fileExists(atPath: url.path)
+    }
+
     /// Loads config, creating a default file on first run. A corrupt file is left
     /// untouched and defaults are used for the session.
     public static func load(from url: URL = configURL) -> AppConfig {

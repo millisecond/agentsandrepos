@@ -48,6 +48,9 @@ public struct AppConfig: Codable, Sendable, Equatable {
     /// When the enable-notifications prompt first appeared on screen; it
     /// auto-dismisses a day later (`NotificationPrompt.autoDismissAfter`).
     public var notificationsPromptFirstShownAt: Date? = nil
+    /// Daily release check against api.agentsandrepos.com (carries only the
+    /// random install UUID). Off disables the request entirely.
+    public var checkForUpdates: Bool = true
 
     public init() {}
 
@@ -61,6 +64,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         case ignoredRepos, ignoredAgents, expandedSections, showLLMSummaries
         case notificationsEnabled, notifyGitActions, notifyWaitingAgents
         case notificationsPromptDismissed, notificationsPromptFirstShownAt
+        case checkForUpdates
     }
 
     // Lenient decoding: any missing/invalid key falls back to its default.
@@ -85,5 +89,6 @@ public struct AppConfig: Codable, Sendable, Equatable {
         notifyWaitingAgents = (try? c.decodeIfPresent(Bool.self, forKey: .notifyWaitingAgents)) ?? d.notifyWaitingAgents
         notificationsPromptDismissed = (try? c.decodeIfPresent(Bool.self, forKey: .notificationsPromptDismissed)) ?? d.notificationsPromptDismissed
         notificationsPromptFirstShownAt = (try? c.decodeIfPresent(Date.self, forKey: .notificationsPromptFirstShownAt)) ?? d.notificationsPromptFirstShownAt
+        checkForUpdates = (try? c.decodeIfPresent(Bool.self, forKey: .checkForUpdates)) ?? d.checkForUpdates
     }
 }

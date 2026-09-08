@@ -31,6 +31,15 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.prScope, .all)
     }
 
+    func testUpdateCheckOptOutPersists() throws {
+        let json = """
+            {"checkForUpdates": false}
+            """
+        let c = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertFalse(c.checkForUpdates)
+        XCTAssertTrue(AppConfig().checkForUpdates)
+    }
+
     func testRoundTrip() throws {
         var c = AppConfig()
         c.roots = ["~/Projects", "~/Work"]
@@ -57,6 +66,15 @@ final class ConfigTests: XCTestCase {
             """
         let c = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
         XCTAssertEqual(c, AppConfig())
+    }
+
+    func testIsFirstRunFlipsAfterLoad() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cfg-test-\(UUID().uuidString)/config.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        XCTAssertTrue(ConfigStore.isFirstRun(url: url))
+        _ = ConfigStore.load(from: url)
+        XCTAssertFalse(ConfigStore.isFirstRun(url: url))
     }
 
     func testStoreCreatesDefaultFile() {

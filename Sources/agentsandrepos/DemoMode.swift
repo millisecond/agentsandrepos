@@ -22,6 +22,7 @@ final class DemoDriver {
     enum FrameKind {
         case row  // keyed by RankedTile.id ("repo:<path>")
         case ellipsis  // keyed by RepoTileState.id (<path>)
+        case search  // the search bar; id ignored
     }
 
     private let store: SnapshotStore
@@ -39,6 +40,7 @@ final class DemoDriver {
     /// DemoFrameReporter as SwiftUI lays rows out.
     private var rowFrames: [String: NSRect] = [:]
     private var ellipsisFrames: [String: NSRect] = [:]
+    private var searchFrame: NSRect?
     private let axTrusted = AXIsProcessTrusted()
 
     init(
@@ -102,6 +104,9 @@ final class DemoDriver {
         tick = (tick + 1) % DemoTimeline.totalTicks
         push()
         // Re-run each loop so re-takes don't need a relaunch.
+        if tick == DemoTimeline.searchSceneStart, axTrusted {
+            Task { @MainActor [weak self] in await self?.runSearchChoreography() }
+        }
         if tick == DemoTimeline.menuSceneStart, axTrusted {
             Task { @MainActor [weak self] in await self?.runChoreography() }
         }
@@ -174,10 +179,39 @@ final class DemoDriver {
         switch kind {
         case .row: rowFrames[id] = frame
         case .ellipsis: ellipsisFrames[id] = frame
+        case .search: searchFrame = frame
         }
     }
 
     // MARK: - Cursor choreography
+
+    /// Opening scene: glide to the search bar, click, type the PR number so
+    /// the board filters to that one row, dwell so the viewer reads it, then
+    /// Esc — the first Escape clears the query and unfocuses, restoring the
+    /// full board for the rest of the story.
+    private func runSearchChoreography() async {
+        NSApp.activate(ignoringOtherApps: true)
+        popoverController.makeKeyIfShown()
+        guard let bar = searchFrame else {
+            print("DEMO_WARN no search-bar frame; skipping search scene")
+            fflush(stdout)
+            return
+        }
+        let target = NSPoint(x: bar.midX, y: bar.midY)
+        await glide(to: target, over: 0.5)
+        await click(at: target)
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        for char in DemoTimeline.searchQuery {
+            typeCharacter(char)
+            try? await Task.sleep(nanoseconds: 180_000_000)
+        }
+        try? await Task.sleep(nanoseconds: 2_800_000_000)
+        pressEscape()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        if let popover = popoverController.popoverWindowFrame {
+            await glide(to: NSPoint(x: popover.midX, y: popover.minY - 24), over: 0.6)
+        }
+    }
 
     /// Glide to the featured row (hover reveals the ⋯ and destination hint),
     /// click the ⋯ so its action menu opens, dwell so the viewer reads it,
@@ -256,6 +290,17 @@ final class DemoDriver {
             event?.setIntegerValueField(.mouseEventClickState, value: 1)
         }
         event?.post(tap: .cghidEventTap)
+    }
+
+    /// Types one character into the focused field. The unicode string carries
+    /// the character, so the virtual keycode (layout-dependent) can be 0.
+    private func typeCharacter(_ char: Character) {
+        let chars = Array(String(char).utf16)
+        for down in [true, false] {
+            let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
+            event?.keyboardSetUnicodeString(stringLength: chars.count, unicodeString: chars)
+            event?.post(tap: .cghidEventTap)
+        }
     }
 
     private func pressEscape() {

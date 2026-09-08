@@ -39,6 +39,16 @@ final class TileStateTests: XCTestCase {
             headRefName: "b", reviewDecision: nil, ci: ci)
     }
 
+    // MARK: - Status-error surfacing
+
+    func testStatusErrorTextSurfacesInProblemDetail() {
+        let tile = RepoTileState(
+            repo: repo(git: GitState(statusError: "fatal: detected dubious ownership")))
+        XCTAssertEqual(tile.statusError, "fatal: detected dubious ownership")
+        let problem = tile.problems.first { $0.label == "git status broken" }
+        XCTAssertEqual(problem?.detail, "fatal: detected dubious ownership")
+    }
+
     // MARK: - Agent tiles
 
     func testAgentSeverityMapping() {
@@ -335,6 +345,16 @@ final class TileStateTests: XCTestCase {
         XCTAssertEqual(RepoTileState(repo: overview).agentDots, [.attention])
         XCTAssertEqual(
             RepoTileState(worktree: wtDirty, parent: overview).agentDots, [.info])
+    }
+
+    func testShellAgentCountsAsWorkInFlight() {
+        // A session parked on a running command is mid-task, not idle: it
+        // dots as info and lifts the tile like a busy agent would.
+        let overview = repo(agents: [agent(.shell)])
+        let tile = RepoTileState(repo: overview)
+        XCTAssertEqual(tile.agentDots, [.info])
+        XCTAssertEqual(tile.severity, .info)
+        XCTAssertEqual(RepoTileState.dots(of: [agent(.idle)]), [.muted])
     }
 
     func testRepoTilesWithoutActivitySortAlphabeticallyRegardlessOfSeverity() {

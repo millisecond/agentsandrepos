@@ -65,6 +65,7 @@ final class DashboardActions {
     func dismissNotificationsPrompt() { delegate?.dismissNotificationsPrompt() }
     func noteNotificationsPromptShown() { delegate?.noteNotificationsPromptShown() }
     func refreshNow() { delegate?.refreshNow() }
+    func searchFocused() { delegate?.searchFocused() }
     func togglePRScope() { delegate?.togglePRScope() }
     func toggleAutoFetch() { delegate?.toggleAutoFetch() }
 

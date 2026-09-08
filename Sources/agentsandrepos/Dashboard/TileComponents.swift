@@ -300,16 +300,25 @@ private struct SeesawEyesAgentIcon: View {
     @State private var swapped = false
 
     var body: some View {
+        // Scoped .animation(value:), NOT withAnimation in onAppear: the
+        // withAnimation form donates its repeat-forever animation to the
+        // whole transaction, so a snapshot publish landing in the same tick
+        // re-lays rows out with it — rows visibly pulse in height forever.
+        // The value-keyed modifier confines the animation to this subtree.
         AgentIconImage(image: AgentIcon.eyeless, color: color)
             .overlay {
                 eye(centerX: AgentIcon.eyeCentersX[0], tall: swapped)
                 eye(centerX: AgentIcon.eyeCentersX[1], tall: !swapped)
             }
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
-                    swapped = true
-                }
-            }
+            .animation(
+                .easeInOut(duration: 0.55).repeatForever(autoreverses: true),
+                value: swapped)
+            // Resolve parent-assigned position before the repeat-forever
+            // transaction sees it: without this, the late first-layout pass
+            // (popover content-height lands a tick after appear) is captured
+            // by the running animation and the leaf glides into place.
+            .geometryGroup()
+            .onAppear { swapped = true }
     }
 
     private func eye(centerX: CGFloat, tall: Bool) -> some View {
@@ -362,11 +371,15 @@ private struct SpinningArc: View {
                 .rotationEffect(.degrees(spinning ? 360 : 0))
         }
         .frame(width: size, height: size)
-        .onAppear {
-            withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
-                spinning = true
-            }
-        }
+        // Value-keyed so the animation can't leak into the transaction
+        // (see SeesawEyesAgentIcon).
+        .animation(
+            .linear(duration: 1.1).repeatForever(autoreverses: false),
+            value: spinning)
+        // See SeesawEyesAgentIcon: settle parent geometry outside the
+        // repeat-forever transaction or the spinner glides into place.
+        .geometryGroup()
+        .onAppear { spinning = true }
     }
 }
 
@@ -403,11 +416,15 @@ struct OrbitingOutline<S: InsettableShape>: View {
                         dash: [perimeter * 0.28, perimeter * 0.72],
                         dashPhase: phase))
         }
-        .onAppear {
-            withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
-                phase = -perimeter
-            }
-        }
+        // Value-keyed so the animation can't leak into the transaction
+        // (see SeesawEyesAgentIcon).
+        .animation(
+            .linear(duration: duration).repeatForever(autoreverses: false),
+            value: phase)
+        // See SeesawEyesAgentIcon: settle parent geometry outside the
+        // repeat-forever transaction or the outline glides into place.
+        .geometryGroup()
+        .onAppear { phase = -perimeter }
     }
 }
 

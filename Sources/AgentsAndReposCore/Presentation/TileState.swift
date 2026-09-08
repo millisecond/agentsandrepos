@@ -89,6 +89,10 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     public let severity: TileSeverity
     /// Local git breakage (`git status` itself failing) — genuinely urgent.
     public let hasError: Bool
+    /// What git actually said when status failed — the difference between
+    /// "something's broken" and knowing it's dubious ownership, a missing
+    /// CLT install, or a timeout.
+    public let statusError: String?
     /// The remote can't be reached (fetch failing: wrong account, no network).
     /// Deliberately NOT urgent — on a machine signed into the wrong GitHub
     /// account this is most repos, and it would drown the ranked list.
@@ -148,6 +152,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
             self.branch = git?.branch ?? "…"
         }
         self.hasError = git?.statusError != nil
+        self.statusError = git?.statusError
         self.unreachable = git?.fetchError != nil
         self.dirty = git?.dirty ?? 0
         self.untracked = git?.untracked ?? 0
@@ -198,6 +203,7 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
             self.branch = branchName ?? "…"
         }
         self.hasError = git?.statusError != nil
+        self.statusError = git?.statusError
         self.unreachable = git?.fetchError != nil
         self.dirty = git?.dirty ?? 0
         self.untracked = git?.untracked ?? 0
@@ -245,7 +251,10 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
                     detail: "directory is gone — git worktree prune",
                     url: nil, severity: .info))
         } else if hasError {
-            list.append(RepoProblem(label: "git status broken", url: nil, severity: .urgent))
+            list.append(
+                RepoProblem(
+                    label: "git status broken", detail: statusError, url: nil,
+                    severity: .urgent))
         }
         for run in runs where run.state == .failed {
             list.append(
@@ -325,8 +334,11 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
         agents.map { agent in
             switch agent.status {
             case .waiting: return .attention
-            case .busy: return .info
-            case .shell, .idle, .unknown: return .muted
+            // Shell counts as work in flight: the agent is parked on a
+            // running command and will resume — muting it made the overview
+            // report a mid-task session as idle.
+            case .busy, .shell: return .info
+            case .idle, .unknown: return .muted
             }
         }
     }
@@ -354,8 +366,8 @@ public struct RepoTileState: Sendable, Equatable, Identifiable {
     }
 
     /// Precedence: run-fail or status error → urgent > waiting agent →
-    /// attention > any in-flight work (dirty/untracked/ahead/behind, busy
-    /// agent, running action) → info > clean → ok > no git or
+    /// attention > any in-flight work (dirty/untracked/ahead/behind, busy or
+    /// shell agent, running action) → info > clean → ok > no git or
     /// unreachable-remote → muted.
     ///
     /// Dirty files are deliberately NOT attention: uncommitted work is the

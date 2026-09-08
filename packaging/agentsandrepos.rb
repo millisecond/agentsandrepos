@@ -14,10 +14,17 @@ cask "agentsandrepos" do
   desc "Menubar overview of git repos, Claude Code agents, worktrees, and GitHub PRs"
   homepage "https://github.com/millisecond/agentsandrepos"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Agents & Repos.app"
   binary "#{appdir}/Agents & Repos.app/Contents/MacOS/agentsandrepos"
+
+  # Menubar app: launch right after install so it appears without an extra
+  # step. (Would need removing if this ever moves to homebrew/cask — official
+  # casks don't auto-launch.)
+  postflight do
+    system_command "/usr/bin/open", args: ["#{appdir}/Agents & Repos.app"]
+  end
 
   zap trash: [
     "~/.config/agentsandrepos",
@@ -28,9 +35,6 @@ cask "agentsandrepos" do
   ]
 
   caveats <<~EOS
-    The app is ad-hoc signed (not notarized). If macOS blocks the first
-    launch, allow it under System Settings → Privacy & Security → Open Anyway.
-
     To start it at login, open the app and enable "Start at login" in
     Settings.
   EOS

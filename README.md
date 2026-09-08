@@ -31,24 +31,18 @@ The menubar icon shows the most urgent thing: `⏸N` agents waiting on you,
 ## Install
 
 ```sh
-brew tap millisecond/tap
-brew install --cask agentsandrepos
-open -a "Agents & Repos"
+brew install --cask millisecond/tap/agentsandrepos
 ```
 
-The cask installs a prebuilt `Agents & Repos.app` (no Xcode needed) and links
-the `agentsandrepos` CLI. The app is ad-hoc signed, not notarized — if macOS
-blocks the first launch, allow it under System Settings → Privacy & Security →
-Open Anyway. To start it at login, enable **Start at login** in the app's
-Settings (a standard login item, visible in System Settings → General →
+The cask installs a prebuilt, notarized `Agents & Repos.app` (no Xcode
+needed), links the `agentsandrepos` CLI, and launches the app — look for the
+new menubar icon. To start it at login, enable **Start at login** in the
+app's Settings (a standard login item, visible in System Settings → General →
 Login Items).
 
-Upgrading from the old formula install (`brew services`):
-
-```sh
-brew services stop agentsandrepos && brew uninstall agentsandrepos
-brew install --cask agentsandrepos
-```
+Heads up: the app phones home once a day to check for new releases; the
+request carries a random install UUID and nothing else, and you can turn it
+off in Settings — details under [Update check](#update-check) below.
 
 Or from a checkout:
 
@@ -108,6 +102,17 @@ PR data comes from the [`gh` CLI](https://cli.github.com) using your existing
 Agent detection reads `~/.claude/sessions/*.json` (Claude Code's live session
 records) and verifies each PID is actually alive, guarding against PID reuse.
 
+## Uninstall
+
+```sh
+brew uninstall --cask agentsandrepos          # removes the app + CLI link
+brew uninstall --zap --cask agentsandrepos    # …plus caches and preferences
+```
+
+Your configuration (roots, ignored repos, settings) lives in
+`~/.config/agentsandrepos` — `--zap` removes that too; a plain uninstall
+leaves it for a future reinstall.
+
 ## Update check
 
 Once a day the app asks `api.agentsandrepos.com` for the latest release and
@@ -115,7 +120,8 @@ shows a banner when a newer version exists. The request carries a random
 install UUID (`install_id`), generated on first launch and stored locally in
 UserDefaults, used only to count installs — it contains no personal
 information and is never derived from anything on the machine. If the check
-fails for any reason it does so silently and no banner appears.
+fails for any reason it does so silently and no banner appears. Turn the
+check off entirely with **Check for updates daily** in Settings.
 
 ## CPU self-check
 
@@ -133,23 +139,28 @@ clear events are also written to the unified log (subsystem
 
 ## Publishing checklist (maintainer)
 
-1. Create the GitHub repo and push: `gh repo create millisecond/agentsandrepos --public --source . --push`
-2. Create the tap repo `millisecond/homebrew-tap` and copy
-   `packaging/agentsandrepos.rb` into its `Casks/` directory.
-3. For a versioned release:
-   - Bump `Version.current` in `Sources/AgentsAndReposCore/Version.swift` to
-     match the tag (the in-app update banner compares it against the latest
-     release advertised by `api.agentsandrepos.com`), commit, then
-     `git tag v0.1.0 && git push --tags`.
-   - `packaging/make-app.sh` — builds `dist/agentsandrepos-<version>.zip` and
-     prints its sha256.
-   - `gh release create v0.1.0 dist/agentsandrepos-0.1.0.zip`
-   - In the tap's `Casks/agentsandrepos.rb`, set `version` and `sha256` to
-     the new values.
+1. Bump `Version.current` in `Sources/AgentsAndReposCore/Version.swift` to
+   match the tag (the in-app update banner compares it against the latest
+   release advertised by `api.agentsandrepos.com`, which relays this repo's
+   latest GitHub release), commit, then `git tag vX.Y.Z && git push --tags`.
+2. Quit the running app, then `packaging/make-app.sh` — builds, signs,
+   notarizes, and staples `dist/agentsandrepos-<version>.zip`, printing its
+   sha256 (needs the `agentsandrepos-notary` keychain profile).
+3. `gh release create vX.Y.Z dist/agentsandrepos-X.Y.Z.zip`
+4. In the tap repo (`millisecond/homebrew-tap`), edit `version` and `sha256`
+   in `Casks/agentsandrepos.rb` **in place** — don't copy
+   `packaging/agentsandrepos.rb` over it; that file keeps a placeholder
+   sha256. Push the tap.
 
 ## Requirements
 
 - macOS 14+
 - Xcode toolchain only to build from source (the cask ships a prebuilt,
-  ad-hoc-signed app — first launch needs a one-time Gatekeeper approval
-  since it isn't notarized)
+  Developer ID-signed and notarized app)
+
+## AI full disclosure
+
+This software is developed with **strong assistance from Claude Fable 5**
+(via Claude Code), with a human leading the ideas, design decisions, testing,
+and debugging. Fittingly, the app itself exists to watch Claude agents work —
+so it was largely built by the kind of agent it monitors.
