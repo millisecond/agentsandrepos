@@ -88,7 +88,7 @@ struct SettingsView: View {
                         "Agent waiting on you for over 5 minutes",
                         isOn: $config.notifyWaitingAgents)
                 }
-                Text("Delivered locally via macOS Notification Center — nothing leaves this Mac. Sound and banner style are managed in System Settings → Notifications.")
+                Text("Delivered locally via macOS Notification Center — nothing leaves this Mac. Sound and banner style are managed in System Settings → Notifications. Build results that match a workflow's usual pattern go quiet; flips, first sightings, and unusually slow or overdue runs get the full alert.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Send Test Notification") { onTestNotification() }

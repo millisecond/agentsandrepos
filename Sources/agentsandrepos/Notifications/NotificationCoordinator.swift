@@ -6,16 +6,23 @@ import Foundation
 /// polling: the 3s agent tick is what detects a waiting threshold crossing.
 @MainActor
 final class NotificationCoordinator {
-    private var planner = NotificationPlanner()
+    private var planner: NotificationPlanner
     private let deliverer: NotificationDelivering
+    private let beliefsURL: URL
     private var wasEnabled = false
     /// Bumped per post of an id; a scheduled expiry only withdraws if its
     /// generation still matches, so a re-posted alert (agent waited again)
     /// isn't taken down by the previous cycle's timer.
     private var postGeneration: [String: Int] = [:]
 
-    init(deliverer: NotificationDelivering? = nil) {
+    init(deliverer: NotificationDelivering? = nil, beliefsURL: URL = BeliefStore.url) {
         self.deliverer = deliverer ?? NotificationDeliverers.make()
+        self.beliefsURL = beliefsURL
+        // Beliefs persist so a workflow seen last week is still "known" and
+        // its routine results stay quiet from the first run after launch.
+        let beliefs = BeliefStore.load(from: beliefsURL)
+        self.planner = NotificationPlanner(beliefs: beliefs)
+        notifyLog.info("loaded \(beliefs.count) run beliefs")
     }
 
     func requestAuthorization() {
@@ -46,6 +53,19 @@ final class NotificationCoordinator {
         }
         wasEnabled = true
         let plan = planner.ingest(snapshot, now: Date())
+        // One line per scored run — the raw material for calibrating the
+        // tier cutoffs from real data later (`log show --predicate
+        // 'category == "notify"'`).
+        for scored in plan.scored {
+            let parts = scored.surprise.components
+                .map { "\($0.name)=\(String(format: "%.2f", $0.value))" }
+                .joined(separator: " ")
+            notifyLog.info(
+                "surprise \(scored.key, privacy: .public) score=\(String(format: "%.2f", scored.surprise.score), privacy: .public) tier=\(scored.surprise.tier.rawValue, privacy: .public) \(parts, privacy: .public)")
+        }
+        if let beliefs = planner.takeDirtyBeliefs() {
+            BeliefStore.save(beliefs, to: beliefsURL)
+        }
         deliverer.withdraw(plan.withdraw)
         for id in plan.withdraw { postGeneration[id] = nil }
         for note in plan.post {

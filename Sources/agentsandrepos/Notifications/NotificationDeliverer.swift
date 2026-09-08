@@ -63,8 +63,9 @@ final class UserNotificationDeliverer: NotificationDelivering {
         notifyLog.info("deliver (UN): \(note.id, privacy: .public)")
         let content = UNMutableNotificationContent()
         content.title = note.title
+        content.subtitle = note.subtitle ?? ""
         content.body = note.body
-        content.sound = note.kind == .actionPassed ? nil : .default
+        content.sound = note.playsSound ? .default : nil
         content.userInfo = NotificationClickRouter.userInfo(for: note.target)
         let request = UNNotificationRequest(
             identifier: note.id, content: content, trigger: nil)
@@ -162,7 +163,8 @@ final class OsascriptNotificationDeliverer: NotificationDelivering {
         notifyLog.info("deliver (osascript): \(note.id, privacy: .public)")
         var script =
             "display notification \(quoted(note.body)) with title \(quoted(note.title))"
-        if note.kind != .actionPassed { script += " sound name \"Glass\"" }
+        if let subtitle = note.subtitle { script += " subtitle \(quoted(subtitle))" }
+        if note.playsSound { script += " sound name \"Glass\"" }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         proc.arguments = ["-e", script]
