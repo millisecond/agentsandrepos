@@ -1,3 +1,4 @@
+#if !NOTIFICATIONS_DISABLED
 import AgentsAndReposCore
 import SwiftUI
 
@@ -39,3 +40,4 @@ struct NotificationPromptBanner: View {
         .onAppear { actions.noteNotificationsPromptShown() }
     }
 }
+#endif

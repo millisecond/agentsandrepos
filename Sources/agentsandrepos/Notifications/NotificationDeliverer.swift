@@ -1,3 +1,4 @@
+#if !NOTIFICATIONS_DISABLED
 import AgentsAndReposCore
 import AppKit
 import Foundation
@@ -191,3 +192,4 @@ final class OsascriptNotificationDeliverer: NotificationDelivering {
                 .replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 }
+#endif

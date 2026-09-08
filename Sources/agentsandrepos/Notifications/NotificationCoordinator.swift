@@ -1,6 +1,17 @@
 import AgentsAndReposCore
 import Foundation
 
+#if NOTIFICATIONS_DISABLED
+/// Built with AGENTSANDREPOS_NOTIFICATIONS=0: same surface as the real
+/// coordinator, does nothing, so AppDelegate needs no conditionals.
+@MainActor
+final class NotificationCoordinator {
+    init() {}
+    func requestAuthorization() {}
+    func sendTest() {}
+    func ingest(_ snapshot: Snapshot) {}
+}
+#else
 /// Feeds every published snapshot to the planner and posts whatever it emits.
 /// Sits on the same snapshot callback as SnapshotStore, so no extra timers or
 /// polling: the 3s agent tick is what detects a waiting threshold crossing.
@@ -88,3 +99,4 @@ final class NotificationCoordinator {
         }
     }
 }
+#endif

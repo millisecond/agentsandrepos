@@ -58,6 +58,9 @@ swift build -c release
 packaging/make-app.sh && open "dist/Agents & Repos.app"   # full app bundle
 ```
 
+Local notifications (opt-in, see Settings) can be compiled out entirely with
+`AGENTSANDREPOS_NOTIFICATIONS=0 swift build -c release`.
+
 ## CLI
 
 The same binary doubles as a terminal tool:
