@@ -2,8 +2,8 @@ import AgentsAndReposCore
 import Foundation
 
 #if NOTIFICATIONS_DISABLED
-/// Built with AGENTSANDREPOS_NOTIFICATIONS=0: same surface as the real
-/// coordinator, does nothing, so AppDelegate needs no conditionals.
+/// Source build (no AGENTSANDREPOS_NOTIFICATIONS=1): same surface as the
+/// real coordinator, does nothing, so AppDelegate needs no conditionals.
 @MainActor
 final class NotificationCoordinator {
     init() {}

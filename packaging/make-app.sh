@@ -10,7 +10,9 @@ VERSION=$(sed -n 's/.*static let current = "\([^"]*\)".*/\1/p' \
     Sources/AgentsAndReposCore/Version.swift)
 [[ -n "$VERSION" ]] || { echo "could not read Version.current" >&2; exit 1; }
 
-swift build -c release
+# Notifications only ship in this signed, notarized bundle — a bare source
+# build compiles them out (see Package.swift).
+AGENTSANDREPOS_NOTIFICATIONS=1 swift build -c release
 
 APP="dist/Agents & Repos.app"
 rm -rf dist

@@ -52,8 +52,10 @@ swift build -c release
 packaging/make-app.sh && open "dist/Agents & Repos.app"   # full app bundle
 ```
 
-Local notifications (opt-in, see Settings) can be compiled out entirely with
-`AGENTSANDREPOS_NOTIFICATIONS=0 swift build -c release`.
+Local notifications only ship in the brew cask: macOS delivers them only from
+a signed, notarized app bundle, so source builds compile them out entirely
+(no Settings section, no permission prompt). `packaging/make-app.sh` turns
+them on with `AGENTSANDREPOS_NOTIFICATIONS=1 swift build -c release`.
 
 ## CLI
 
