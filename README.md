@@ -47,12 +47,15 @@ off in Settings — details under [Update check](#update-check) below.
 ## Upgrade
 
 ```sh
-brew upgrade --cask millisecond/tap/agentsandrepos && killall agentsandrepos && open -a "Agents & Repos"
+brew tap millisecond/tap && brew upgrade --cask agentsandrepos && killall agentsandrepos && open -a "Agents & Repos"
 ```
 
 The upgrade swaps the .app on disk but leaves the old version running (it
 holds the single-instance lock), hence the relaunch. The in-app update
-banner copies this exact command to your clipboard.
+banner copies this exact command to your clipboard. The leading `brew tap`
+is a no-op on a healthy setup; it's there because `brew upgrade` never
+auto-taps, so a missing or untrusted tap otherwise fails with "Cask …
+is unavailable" (answer the trust prompt if one appears).
 
 ## Build from source
 
