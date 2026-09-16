@@ -22,8 +22,11 @@ public enum UpdateCheck {
     /// Command a brew user runs to move to the advertised release. The
     /// upgrade swaps the .app on disk but leaves the old binary running (and
     /// holding the single-instance lock), so the command also relaunches.
+    /// Fully-qualified cask name: the bare name only resolves when the local
+    /// tap state is healthy, and its failure modes read like the tap doesn't
+    /// exist (a user hit exactly that).
     public static let upgradeCommand =
-        "brew upgrade --cask agentsandrepos && killall agentsandrepos && open -a \"Agents & Repos\""
+        "brew upgrade --cask millisecond/tap/agentsandrepos && killall agentsandrepos && open -a \"Agents & Repos\""
 
     /// Bare version from a release `tag_name` ("v0.2.0" → "0.2.0").
     /// Nil when the tag doesn't start with a version number.
