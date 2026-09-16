@@ -44,18 +44,39 @@ Heads up: the app phones home once a day to check for new releases; the
 request carries a random install UUID and nothing else, and you can turn it
 off in Settings — details under [Update check](#update-check) below.
 
-Or from a checkout:
+## Upgrade
+
+```sh
+brew upgrade --cask millisecond/tap/agentsandrepos && killall agentsandrepos && open -a "Agents & Repos"
+```
+
+The upgrade swaps the .app on disk but leaves the old version running (it
+holds the single-instance lock), hence the relaunch. The in-app update
+banner copies this exact command to your clipboard.
+
+## Build from source
 
 ```sh
 swift build -c release
 .build/release/agentsandrepos &          # bare binary: no login-item support
-packaging/make-app.sh && open "dist/Agents & Repos.app"   # full app bundle
 ```
 
-Local notifications only ship in the brew cask: macOS delivers them only from
-a signed, notarized app bundle, so source builds compile them out entirely
-(no Settings section, no permission prompt). `packaging/make-app.sh` turns
-them on with `AGENTSANDREPOS_NOTIFICATIONS=1 swift build -c release`.
+Or skip the manual steps entirely: clone the repo and ask Claude Code to
+build and launch it — fitting, since that's how most of this app was written.
+
+Two things only the brew cask's notarized build provides:
+
+- **Local notifications** (opt-in, see Settings): macOS delivers them only
+  from a signed, notarized app bundle, so source builds compile them out
+  entirely — no Settings section, no permission prompt.
+  `packaging/make-app.sh` turns them on with
+  `AGENTSANDREPOS_NOTIFICATIONS=1 swift build -c release`.
+- **Start at login**: needs an app bundle, not a bare binary.
+
+`packaging/make-app.sh` builds that full bundle, but signs and notarizes with
+the maintainer's Developer ID — to use it yourself, swap in your own identity
+and notary profile (or replace the codesign line with `codesign --force
+--sign -` for a local ad-hoc bundle, losing notifications).
 
 ## CLI
 
