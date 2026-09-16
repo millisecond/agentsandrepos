@@ -24,6 +24,9 @@ public struct AgentTileState: Sendable, Equatable, Identifiable {
     public let severity: TileSeverity
     public let isPulsing: Bool
     public let title: String
+    /// The name alone, without the "(bg)" suffix `title` may carry — what a
+    /// rename field should prefill.
+    public let displayName: String
     public let subtitle: String
     public let statusLabel: String
     public let glyph: String
@@ -57,6 +60,7 @@ public struct AgentTileState: Sendable, Equatable, Identifiable {
         }
         self.isPulsing = agent.status.isBusy
         let bg = agent.isBackground ? " (bg)" : ""
+        self.displayName = agent.displayName
         self.title = agent.displayName + bg
         self.subtitle = location
         self.statusLabel = agent.status.label

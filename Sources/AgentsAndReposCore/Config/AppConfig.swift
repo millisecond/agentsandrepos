@@ -29,6 +29,9 @@ public struct AppConfig: Codable, Sendable, Equatable {
     public var ignoredRepos: [String] = []
     /// Agent session ids hidden from the dashboard/menu.
     public var ignoredAgents: [String] = []
+    /// User-set display names keyed by agent session id, overriding the
+    /// session file's name. Dead ids are pruned on the next rename.
+    public var agentNames: [String: String] = [:]
     /// Dashboard sections the user expanded past the recent-N cutoff.
     public var expandedSections: [String] = []
     /// On-device LLM one-liners on tiles (Apple Intelligence). On by default;
@@ -61,7 +64,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case schemaVersion, roots, scanDepth, fetchEnabled, fetchIntervalMinutes
         case autoFastForward, prScope, prIntervalMinutes, statusIntervalSeconds
-        case ignoredRepos, ignoredAgents, expandedSections, showLLMSummaries
+        case ignoredRepos, ignoredAgents, agentNames, expandedSections, showLLMSummaries
         case notificationsEnabled, notifyGitActions, notifyWaitingAgents
         case notificationsPromptDismissed, notificationsPromptFirstShownAt
         case checkForUpdates
@@ -82,6 +85,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         statusIntervalSeconds = (try? c.decodeIfPresent(Int.self, forKey: .statusIntervalSeconds)) ?? d.statusIntervalSeconds
         ignoredRepos = (try? c.decodeIfPresent([String].self, forKey: .ignoredRepos)) ?? d.ignoredRepos
         ignoredAgents = (try? c.decodeIfPresent([String].self, forKey: .ignoredAgents)) ?? d.ignoredAgents
+        agentNames = (try? c.decodeIfPresent([String: String].self, forKey: .agentNames)) ?? d.agentNames
         expandedSections = (try? c.decodeIfPresent([String].self, forKey: .expandedSections)) ?? d.expandedSections
         showLLMSummaries = (try? c.decodeIfPresent(Bool.self, forKey: .showLLMSummaries)) ?? d.showLLMSummaries
         notificationsEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled)) ?? d.notificationsEnabled

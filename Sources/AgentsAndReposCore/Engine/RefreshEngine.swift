@@ -349,6 +349,27 @@ public actor RefreshEngine {
         publish()
     }
 
+    /// Set or clear (nil/blank) a user-chosen display name for a session.
+    /// Persisted in config so a rename survives app relaunches for as long
+    /// as the session lives.
+    public func setAgentName(sessionId: String, name: String?) {
+        var c = config
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmed.isEmpty {
+            c.agentNames.removeValue(forKey: sessionId)
+        } else {
+            c.agentNames[sessionId] = trimmed
+        }
+        // Same pruning as ignoredAgents: sessions never come back once gone.
+        let live = Set(sessions.map(\.sessionId))
+        for id in c.agentNames.keys where id != sessionId && !live.contains(id) {
+            c.agentNames.removeValue(forKey: id)
+        }
+        config = c
+        ConfigStore.save(c)
+        publish()
+    }
+
     /// One-shot full pass for the `snapshot` CLI.
     public func snapshotOnce(includePRs: Bool) async -> Snapshot {
         await discoverTick()
@@ -705,6 +726,12 @@ public actor RefreshEngine {
         var other: [AgentSession] = []
         let allPaths =
             repos.map(\.path) + worktreesByRepo.values.flatMap { $0.map(\.path) }
+        // User renames override session-file names here, once, so every
+        // consumer (menu, tiles, notifications, CLI) agrees on the name.
+        let sessions = sessions.map { s in
+            if let custom = config.agentNames[s.sessionId] { return s.named(custom) }
+            return s
+        }
         for session in sessions {
             let best =
                 allPaths

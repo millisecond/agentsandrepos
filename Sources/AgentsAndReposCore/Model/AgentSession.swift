@@ -74,6 +74,15 @@ public struct AgentSession: Sendable, Equatable, Identifiable {
 
     public var id: String { sessionId }
     public var displayName: String { name ?? String(sessionId.prefix(8)) }
+
+    /// Copy with a replacement display name — how the engine applies a
+    /// user-set rename from config at snapshot-assembly time.
+    public func named(_ newName: String) -> AgentSession {
+        AgentSession(
+            pid: pid, sessionId: sessionId, cwd: cwd, name: newName, kind: kind,
+            status: status, startedAt: startedAt, updatedAt: updatedAt, task: task,
+            activity: activity)
+    }
     public var isBackground: Bool { kind == "bg" }
 
     public init(

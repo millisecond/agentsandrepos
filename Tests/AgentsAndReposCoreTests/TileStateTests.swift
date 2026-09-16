@@ -51,6 +51,20 @@ final class TileStateTests: XCTestCase {
 
     // MARK: - Agent tiles
 
+    /// `named` is how the engine applies a config rename at snapshot time —
+    /// only the name may change, and the tile keeps the raw name (without
+    /// the bg suffix) around as the rename field's seed.
+    func testRenamedSessionKeepsIdentityAndSeedsTile() {
+        let renamed = agent(.busy, name: "old", kind: "bg", sessionId: "s-1").named("Refactor bot")
+        XCTAssertEqual(renamed.displayName, "Refactor bot")
+        XCTAssertEqual(renamed.sessionId, "s-1")
+        XCTAssertEqual(renamed.pid, 1)
+        XCTAssertEqual(renamed.status, .busy)
+        let tile = AgentTileState(agent: renamed, location: "l", path: "/x")
+        XCTAssertEqual(tile.title, "Refactor bot (bg)")
+        XCTAssertEqual(tile.displayName, "Refactor bot")
+    }
+
     func testAgentSeverityMapping() {
         XCTAssertEqual(AgentTileState(agent: agent(.waiting(nil)), location: "l", path: "/x").severity, .attention)
         XCTAssertEqual(AgentTileState(agent: agent(.busy), location: "l", path: "/x").severity, .info)

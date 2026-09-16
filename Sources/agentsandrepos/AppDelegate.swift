@@ -15,6 +15,7 @@ protocol MenuActionDelegate: AnyObject {
     func fetchRepo(path: String)
     func setRepoIgnored(path: String, ignored: Bool)
     func setAgentIgnored(sessionId: String, ignored: Bool)
+    func setAgentName(sessionId: String, name: String?)
     func setSectionExpanded(section: DashboardSection, expanded: Bool)
     func setNotificationsEnabled(_ enabled: Bool)
     func dismissNotificationsPrompt()
@@ -191,6 +192,11 @@ extension AppDelegate: MenuActionDelegate {
     func setAgentIgnored(sessionId: String, ignored: Bool) {
         guard let engine else { return }
         Task { await engine.setAgentIgnored(sessionId: sessionId, ignored: ignored) }
+    }
+
+    func setAgentName(sessionId: String, name: String?) {
+        guard let engine else { return }
+        Task { await engine.setAgentName(sessionId: sessionId, name: name) }
     }
 
     func setSectionExpanded(section: DashboardSection, expanded: Bool) {

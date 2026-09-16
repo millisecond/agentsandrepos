@@ -47,6 +47,7 @@ final class ConfigTests: XCTestCase {
         c.prScope = .all
         c.ignoredRepos = ["/p/hidden"]
         c.ignoredAgents = ["session-1"]
+        c.agentNames = ["session-2": "Refactor bot"]
         c.expandedSections = ["repos"]
         c.notificationsEnabled = true
         c.notifyGitActions = false

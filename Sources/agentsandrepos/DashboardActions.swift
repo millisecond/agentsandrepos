@@ -58,6 +58,7 @@ final class DashboardActions {
     func unignoreRepo(path: String) { delegate?.setRepoIgnored(path: path, ignored: false) }
     func ignoreAgent(sessionId: String) { delegate?.setAgentIgnored(sessionId: sessionId, ignored: true) }
     func unignoreAgent(sessionId: String) { delegate?.setAgentIgnored(sessionId: sessionId, ignored: false) }
+    func renameAgent(sessionId: String, name: String?) { delegate?.setAgentName(sessionId: sessionId, name: name) }
     func setSectionExpanded(_ section: DashboardSection, expanded: Bool) {
         delegate?.setSectionExpanded(section: section, expanded: expanded)
     }

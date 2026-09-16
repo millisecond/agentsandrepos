@@ -12,6 +12,9 @@ struct AgentTileView: View {
     var agentSummary: SummaryDisplay = SummaryDisplay()
     let actions: DashboardActions
     @State private var isHovering = false
+    @State private var isRenaming = false
+    @State private var renameDraft = ""
+    @FocusState private var renameFocused: Bool
     @Environment(\.dashboardLive) private var live
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -28,9 +31,7 @@ struct AgentTileView: View {
                 .overlay(badgeOutline)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(state.title)
-                        .font(.callout.weight(.semibold))
-                        .lineLimit(1)
+                    titleView
                     Text(state.subtitle)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -39,13 +40,14 @@ struct AgentTileView: View {
                     // overlay, not a layout sibling — the button is taller
                     // than the text line, so participating in layout would
                     // grow the row on hover). Status and bars never move.
+                    // The menu stays mounted (opacity, not `if`) so hover
+                    // ending under an open menu doesn't tear the menu down.
                     Spacer(minLength: 8)
                         .overlay(alignment: .trailing) {
-                            if isHovering {
-                                TileIgnoreButton(help: "Ignore this agent") {
-                                    actions.ignoreAgent(sessionId: state.id)
-                                }
-                            }
+                            overflowMenu
+                                .opacity(isHovering ? 1 : 0)
+                                .allowsHitTesting(isHovering)
+                                .accessibilityHidden(!isHovering)
                         }
                     Text(state.statusLabel)
                         .font(.caption2.weight(.medium))
@@ -63,19 +65,85 @@ struct AgentTileView: View {
         .modifier(RowChrome(severity: state.severity, tint: tileTint, style: .agent))
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovering = $0 }
-        .onTapGesture { actions.focusAgent(pid: state.pid, fallbackPath: state.path) }
+        .onTapGesture {
+            guard !isRenaming else { return }
+            actions.focusAgent(pid: state.pid, fallbackPath: state.path)
+        }
         .contextMenu {
             Button("Focus Session") { actions.focusAgent(pid: state.pid, fallbackPath: state.path) }
             Button("Open in Finder") { actions.openInFinder(path: state.path) }
             Button("Open in Terminal") { actions.openInTerminal(path: state.path) }
             Button("Copy Path") { actions.copyPath(state.path) }
             Divider()
-            Button("Ignore") { actions.ignoreAgent(sessionId: state.id) }
+            Button("Rename…") { beginRename() }
+            Button("Hide") { actions.ignoreAgent(sessionId: state.id) }
         }
         .help(
             "\(state.title) — \(state.statusLabel) · \(state.subtitle)"
                 + (userSummary.text.map { " — asked: \($0)" } ?? "")
                 + (agentSummary.text.map { " — agent: \($0)" } ?? ""))
+    }
+
+    /// The title line, swapping to an inline edit field while renaming.
+    /// Return commits (blank clears the custom name back to the session's
+    /// own), Escape or clicking away cancels.
+    @ViewBuilder
+    private var titleView: some View {
+        if isRenaming {
+            TextField("Name", text: $renameDraft)
+                .textFieldStyle(.plain)
+                .font(.callout.weight(.semibold))
+                .focused($renameFocused)
+                .frame(maxWidth: 180)
+                // Focus can only land once the field exists, so it's claimed
+                // here rather than in beginRename().
+                .onAppear { renameFocused = true }
+                .onSubmit { commitRename() }
+                .onExitCommand { cancelRename() }
+                .onChange(of: renameFocused) {
+                    if !renameFocused { cancelRename() }
+                }
+        } else {
+            Text(state.title)
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+        }
+    }
+
+    /// Hover-revealed 3-dot menu: rename and hide live here so the row's
+    /// only always-on affordances stay the click-to-focus and context menu.
+    private var overflowMenu: some View {
+        Menu {
+            Button("Rename…") { beginRename() }
+            Button("Hide") { actions.ignoreAgent(sessionId: state.id) }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(4)
+                .background(Circle().fill(.thickMaterial))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Rename or hide this agent")
+    }
+
+    private func beginRename() {
+        renameDraft = state.displayName
+        isRenaming = true
+    }
+
+    private func commitRename() {
+        isRenaming = false
+        let name = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Unchanged text is a no-op; blank clears any custom name.
+        guard name != state.displayName else { return }
+        actions.renameAgent(sessionId: state.id, name: name.isEmpty ? nil : name)
+    }
+
+    private func cancelRename() {
+        isRenaming = false
     }
 
     /// The badge border. While the agent is actually doing something (busy,
