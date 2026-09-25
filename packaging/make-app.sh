@@ -23,6 +23,12 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
     "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
+# App icon: rendered at build time from the same code-drawn robot as the
+# menu bar glyph (no binary asset in the repo). Info.plist names it via
+# CFBundleIconFile.
+mkdir -p "$APP/Contents/Resources"
+swift packaging/make-icon.swift "$APP/Contents/Resources/AppIcon.icns"
+
 # Developer ID + hardened runtime, then notarize and staple so the
 # quarantined brew download opens without any Gatekeeper prompt. Notary
 # credentials are stored once via:
