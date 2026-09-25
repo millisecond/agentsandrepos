@@ -74,10 +74,10 @@ final class RankedTileTests: XCTestCase {
     }
 
     func testPRsInterleaveWithRepos() {
-        // Failing PR (urgent 100 + recent 50) > dirty repo (info 30 + recent
-        // 50) > passing PR (ok 10 + 35) > host repo (ok 10, no activity) —
-        // the failing PR paints only its own row; the clean host repo ranks
-        // on its local state.
+        // Failing PR (urgent 100 + recent 50) > passing PR (ok 10 + 50 +
+        // green 40) > dirty repo (info 30 + recent 50) > host repo (ok 10,
+        // no activity) — the failing PR paints only its own row; the clean
+        // host repo ranks on its local state.
         var snap = Snapshot.empty
         snap.repos = [
             repo(
@@ -87,7 +87,44 @@ final class RankedTileTests: XCTestCase {
                 prs: [pr(.fail, number: 1, updatedAgo: 60), pr(.pass, number: 2, updatedAgo: 1800)]),
         ]
         let names = snap.rankedTiles(now: now).map(\.sortName)
-        XCTAssertEqual(names, ["host #1", "dirty", "host #2", "host"])
+        XCTAssertEqual(names, ["host #1", "host #2", "dirty", "host"])
+    }
+
+    func testPRDecayIsSlowerThanRepoDecay() {
+        let ages: [TimeInterval] = [60, 1800, 7200, 43200, 200_000, 1_000_000]
+        let scores = ages.map {
+            AttentionScore.prRecency(now.addingTimeInterval(-$0), now: now)
+        }
+        XCTAssertEqual(scores, scores.sorted(by: >))
+        XCTAssertEqual(AttentionScore.prRecency(nil, now: now), 0)
+        XCTAssertEqual(scores.last, 0)
+        // At every age a PR keeps at least as much heat as a repo would.
+        for age in ages {
+            let date = now.addingTimeInterval(-age)
+            XCTAssertGreaterThanOrEqual(
+                AttentionScore.prRecency(date, now: now),
+                AttentionScore.recency(date, now: now))
+        }
+    }
+
+    func testOvernightPRsStillTopFreshlyTouchedDirtyRepos() {
+        // The morning-after scenario this scoring exists for: PRs from last
+        // evening (14h ago) must not sink under repos whose files got touched
+        // a minute ago. Green: ok 10 + 35 + 40 = 85; running: info 30 + 35 +
+        // 50 = 115; dirty-just-touched: info 30 + 50 = 80.
+        var snap = Snapshot.empty
+        snap.repos = [
+            repo(name: "dirty-a", git: GitState(branch: "m", dirty: 2), activityAgo: 60),
+            repo(name: "dirty-b", git: GitState(branch: "m", dirty: 9), activityAgo: 300),
+            repo(
+                name: "host",
+                prs: [
+                    pr(.pass, number: 3, updatedAgo: 50_400),
+                    pr(.pending, number: 4, updatedAgo: 50_400),
+                ]),
+        ]
+        let names = snap.rankedTiles(now: now).map(\.sortName)
+        XCTAssertEqual(Array(names.prefix(2)), ["host #4", "host #3"])
     }
 
     func testRunningCIPROutranksFreshDirtyRepos() {

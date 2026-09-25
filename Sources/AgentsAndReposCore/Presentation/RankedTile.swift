@@ -31,17 +31,35 @@ public enum AttentionScore {
         }
     }
 
+    /// PR decay, deliberately slower than repo decay: an open PR stays "the
+    /// thing I'm waiting on" until it's merged or abandoned, so a night away
+    /// (the under-a-day band) keeps most of its heat — the next morning it
+    /// should still sit above repos whose files merely got touched. Repos
+    /// cool fast because file mtimes fire constantly and mostly mean noise.
+    static func prRecency(_ date: Date?, now: Date) -> Double {
+        guard let date else { return 0 }
+        switch now.timeIntervalSince(date) {
+        case ..<3600: return 50
+        case ..<21600: return 45
+        case ..<86400: return 35
+        case ..<259_200: return 20
+        case ..<604_800: return 10
+        default: return 0
+        }
+    }
+
     /// PRs with CI in flight or green are the GitHub-side things a person
     /// is actually waiting on — to watch land, or to merge. Their severity
     /// stays info/ok (that's the row color), but on severity alone every
     /// dirty repo (info 30) buried them; this lifts them without repainting:
-    /// running 30+40 sits between attention and urgent, green 10+30 sits
-    /// above a dirty repo touched more than an hour ago.
+    /// running 30+50 sits between attention and urgent, green 10+40 sits
+    /// between info and attention, so a boost alone never crosses into the
+    /// next severity tier.
     static func ciBoost(_ ci: PullRequest.CIStatus, isDraft: Bool) -> Double {
         guard !isDraft else { return 0 }
         switch ci {
-        case .pending: return 40
-        case .pass: return 30
+        case .pending: return 50
+        case .pass: return 40
         case .fail, .none: return 0
         }
     }
@@ -87,9 +105,14 @@ public enum RankedTile: Sendable, Equatable, Identifiable {
     }
 
     public func score(now: Date) -> Double {
-        var s = AttentionScore.score(severity: severity, lastActivity: lastActivity, now: now)
-        if case .pr(let p) = self { s += AttentionScore.ciBoost(p.ci, isDraft: p.isDraft) }
-        return s
+        switch self {
+        case .repo(let r):
+            return AttentionScore.score(severity: r.severity, lastActivity: r.lastActivity, now: now)
+        case .pr(let p):
+            return AttentionScore.base(p.severity)
+                + AttentionScore.prRecency(p.updatedAt, now: now)
+                + AttentionScore.ciBoost(p.ci, isDraft: p.isDraft)
+        }
     }
 }
 
