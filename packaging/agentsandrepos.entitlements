@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Focus Session drives Terminal.app / iTerm2 over Apple events to
+     select the tab whose tty runs the agent. Under the hardened runtime
+     (any Developer ID / notarized signing) that is refused outright with
+     -1743 "Not authorized to send Apple events" unless this entitlement is
+     present — no TCC prompt, no log beyond ours — and the app silently
+     degrades to raising the first window whose title mentions the cwd,
+     which is the wrong one whenever several sessions share a repo. -->
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+</dict>
+</plist>

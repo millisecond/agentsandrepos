@@ -32,7 +32,16 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 IDENTITY="Developer ID Application: Casey Haakenson (5B8CP2DVHZ)"
 NOTARY_PROFILE="agentsandrepos-notary"
 
-codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
+# The entitlements file must ride along: the hardened runtime refuses Apple
+# events to Terminal/iTerm2 without it (-1743, no TCC prompt), which breaks
+# Focus Session's tab-by-tty lookup while everything else keeps working —
+# the AX fallback raises an arbitrary same-repo window instead.
+ENTITLEMENTS="packaging/agentsandrepos.entitlements"
+
+codesign --force --options runtime --timestamp --sign "$IDENTITY" \
+    --entitlements "$ENTITLEMENTS" "$APP"
+codesign -d --entitlements - "$APP" 2>/dev/null | grep -q apple-events \
+    || { echo "entitlements missing from signature" >&2; exit 1; }
 
 ZIP="dist/agentsandrepos-$VERSION.zip"
 ditto -c -k --keepParent "$APP" "$ZIP"
