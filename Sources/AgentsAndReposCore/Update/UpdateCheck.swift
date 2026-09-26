@@ -19,18 +19,15 @@ public enum UpdateCheck {
         return components.url!
     }
 
-    /// Command a brew user runs to move to the advertised release. The
-    /// upgrade swaps the .app on disk but leaves the old binary running (and
-    /// holding the single-instance lock), so the command also relaunches.
-    ///
-    /// The leading `brew tap` self-heals the states a user actually hit:
-    /// `brew upgrade` never auto-taps (even fully qualified), and a tap
-    /// that's present but untrusted is ignored wholesale by Homebrew 6 —
-    /// both fail with "Cask ... is unavailable. This command requires the
-    /// tap". Re-tapping is a no-op when healthy and interactively triggers
-    /// the trust prompt when not.
+    /// Command a brew user runs to move to the advertised release — the same
+    /// command as the README's install. `brew install` upgrades an outdated
+    /// cask, and the fully-qualified name auto-taps and auto-trusts (unlike
+    /// `brew upgrade`, which never taps and fails on a missing or untrusted
+    /// tap). The cask's `uninstall signal` stops the running app during the
+    /// upgrade, and `open -a` relaunches it: install steps can't launch apps
+    /// from inside Homebrew 6's sandbox.
     public static let upgradeCommand =
-        "brew tap millisecond/tap && brew upgrade --cask agentsandrepos && killall agentsandrepos && open -a \"Agents & Repos\""
+        "brew install --cask millisecond/tap/agentsandrepos && open -a \"Agents & Repos\""
 
     /// Bare version from a release `tag_name` ("v0.2.0" → "0.2.0").
     /// Nil when the tag doesn't start with a version number.

@@ -1,7 +1,7 @@
 # Agents & Repos
 
 A macOS menubar app to optimize your claude code usage by: 
-- Search across all claude code sessions and git to find relevant 
+- Search across all claude code sessions and git  
 - Quickly open/focus any claude code session or repo/PR
 - Local LLM summaries of your last prompt and the agent's work 
 - Find sessions waiting on your input 
@@ -11,35 +11,24 @@ This software is developed with **strong assistance from claude code** with a hu
 
 ![Agents & Repos demo](docs/demo.gif)
 
-## Install
+## Install or upgrade
 
 ```sh
-brew install --cask millisecond/tap/agentsandrepos
+brew install --cask millisecond/tap/agentsandrepos && open -a "Agents & Repos"
 ```
 
-The cask installs a prebuilt, notarized, universal (Apple Silicon + Intel)
-`Agents & Repos.app` — no Xcode needed — and links the `agentsandrepos` CLI.
-Launch it with `open -a "Agents & Repos"` and look for the new menubar icon.
-To start it at login, enable **Start at login** in the
-app's Settings (a standard login item, visible in System Settings → General →
-Login Items).
+The same command installs, upgrades, and (re)launches — look for the new
+menubar icon. It installs a prebuilt, notarized, universal (Apple Silicon +
+Intel) `Agents & Repos.app` — no Xcode needed — and links the
+`agentsandrepos` CLI. On an upgrade, Homebrew stops the running copy before
+swapping the app; when a new release is out, the in-app banner copies this
+command for you. To start it at login, enable **Start at login** in the app's
+Settings (a standard login item, visible in System Settings → General → Login
+Items).
 
 Heads up: the app phones home once a day to check for new releases; the
 request carries a random install UUID and nothing else, and you can turn it
 off in Settings — details under [Update check](#update-check) below.
-
-## Upgrade
-
-```sh
-brew tap millisecond/tap && brew upgrade --cask agentsandrepos && killall agentsandrepos && open -a "Agents & Repos"
-```
-
-The upgrade swaps the .app on disk but leaves the old version running (it
-holds the single-instance lock), hence the relaunch. The in-app update
-banner copies this exact command to your clipboard. The leading `brew tap`
-is a no-op on a healthy setup; it's there because `brew upgrade` never
-auto-taps, so a missing or untrusted tap otherwise fails with "Cask …
-is unavailable" (answer the trust prompt if one appears).
 
 ## Build from source
 

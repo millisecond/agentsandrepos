@@ -22,8 +22,17 @@ cask "agentsandrepos" do
   # No auto-launch postflight: Homebrew 6 runs install steps inside a sandbox
   # that can't reach RunningBoard, so `open` fails there (kLSUnknownErr,
   # "Couldn't communicate with a helper application") and takes the whole
-  # install down with it. The caveats tell the user to open the app; the
-  # in-app upgrade command already ends with `open -a`.
+  # install down with it. The README's install command (also the in-app
+  # upgrade command) ends with `open -a` instead.
+
+  # Stop the running app on uninstall and upgrade — otherwise it keeps
+  # running from the deleted bundle and holds the single-instance lock.
+  # on_upgrade: brew skips `signal` during upgrade/reinstall without it.
+  # Array form on purpose: brew replays the OLD cask from the JSON it saved
+  # at install, which turns a bare :signal into "signal", and it ignores a
+  # String there. An array survives (Homebrew 6).
+  uninstall signal:     [["TERM", "com.millisecond.agentsandrepos"]],
+            on_upgrade: [:signal]
 
   zap trash: [
     "~/.config/agentsandrepos",
