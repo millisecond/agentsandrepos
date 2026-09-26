@@ -24,7 +24,11 @@ rm -rf dist
 mkdir -p "$APP/Contents/MacOS"
 cp "$BINARY" "$APP/Contents/MacOS/agentsandrepos"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# CFBundleVersion too, not just the short version: Launch Services uses it to
+# pick among bundles sharing an ID (e.g. a dist/ build vs /Applications), and
+# a constant "1" made every release look identical to it.
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
+    -c "Set :CFBundleVersion $VERSION" \
     "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
