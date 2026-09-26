@@ -11,13 +11,18 @@ VERSION=$(sed -n 's/.*static let current = "\([^"]*\)".*/\1/p' \
 [[ -n "$VERSION" ]] || { echo "could not read Version.current" >&2; exit 1; }
 
 # Notifications only ship in this signed, notarized bundle — a bare source
-# build compiles them out (see Package.swift).
-AGENTSANDREPOS_NOTIFICATIONS=1 swift build -c release
+# build compiles them out (see Package.swift). Universal (arm64 + x86_64):
+# a host-arch-only build shipped once and Intel installs failed with
+# "incorrect executable format". Universal builds land under
+# .build/apple/Products, not .build/release.
+AGENTSANDREPOS_NOTIFICATIONS=1 swift build -c release --arch arm64 --arch x86_64
+BINARY=".build/apple/Products/Release/agentsandrepos"
+lipo -archs "$BINARY" | grep -q x86_64 || { echo "binary is not universal" >&2; exit 1; }
 
 APP="dist/Agents & Repos.app"
 rm -rf dist
 mkdir -p "$APP/Contents/MacOS"
-cp .build/release/agentsandrepos "$APP/Contents/MacOS/agentsandrepos"
+cp "$BINARY" "$APP/Contents/MacOS/agentsandrepos"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
     "$APP/Contents/Info.plist"

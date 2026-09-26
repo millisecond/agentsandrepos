@@ -21,9 +21,11 @@ cask "agentsandrepos" do
 
   # Menubar app: launch right after install so it appears without an extra
   # step. (Would need removing if this ever moves to homebrew/cask — official
-  # casks don't auto-launch.)
-  postflight do
-    system_command "/usr/bin/open", args: ["#{appdir}/Agents & Repos.app"]
+  # casks don't auto-launch.) postflight_steps, not the deprecated postflight:
+  # Homebrew 6 runs these declarative steps in its sandbox and warns on the
+  # old block form.
+  postflight_steps do
+    run "/usr/bin/open", args: ["{{appdir}}/Agents & Repos.app"]
   end
 
   zap trash: [
