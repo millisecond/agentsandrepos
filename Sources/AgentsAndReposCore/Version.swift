@@ -1,5 +1,5 @@
 public enum Version {
-    public static let current = "0.3.3"
+    public static let current = "0.3.4"
 }
 
 public enum AppInfo {
