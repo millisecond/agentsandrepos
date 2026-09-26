@@ -19,7 +19,7 @@ final class StatusItemController: NSObject {
 
         if let button = statusItem.button {
             button.image = AgentIcon.idle
-            button.imagePosition = .imageLeading
+            button.imagePosition = .imageOnly
             button.target = self
             button.action = #selector(statusButtonClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -46,7 +46,6 @@ final class StatusItemController: NSObject {
         guard let button = statusItem.button else { return }
         if onboarding {
             if button.image !== AgentIcon.setup { button.image = AgentIcon.setup }
-            if button.title != "" { button.title = "" }
             return
         }
         let agents = snapshot.visibleAgents
@@ -64,25 +63,18 @@ final class StatusItemController: NSObject {
         }
 
         let image: NSImage
-        let title: String
         if waiting > 0 {
             image = AgentIcon.waiting
-            title = " \(waiting)"
         } else if busy > 0 {
             image = AgentIcon.busy
-            title = " \(busy)"
         } else if errors > 0 {
             image = AgentIcon.error
-            title = " \(errors)"
         } else {
             image = AgentIcon.idle
-            title = ""
         }
-        // Setting an unchanged title/image still dirties the status-bar
-        // window's layout; skip both so per-tick publishes don't redraw the
-        // menu bar.
+        // Setting an unchanged image still dirties the status-bar window's
+        // layout; skip it so per-tick publishes don't redraw the menu bar.
         if button.image !== image { button.image = image }
-        if button.title != title { button.title = title }
     }
 
     // MARK: - Click handling

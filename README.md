@@ -17,9 +17,10 @@ This software is developed with **strong assistance from claude code** with a hu
 brew install --cask millisecond/tap/agentsandrepos
 ```
 
-The cask installs a prebuilt, notarized `Agents & Repos.app` (no Xcode
-needed), links the `agentsandrepos` CLI, and launches the app — look for the
-new menubar icon. To start it at login, enable **Start at login** in the
+The cask installs a prebuilt, notarized, universal (Apple Silicon + Intel)
+`Agents & Repos.app` — no Xcode needed — and links the `agentsandrepos` CLI.
+Launch it with `open -a "Agents & Repos"` and look for the new menubar icon.
+To start it at login, enable **Start at login** in the
 app's Settings (a standard login item, visible in System Settings → General →
 Login Items).
 
@@ -61,8 +62,9 @@ Two things only the brew cask's notarized build provides:
 
 `packaging/make-app.sh` builds that full bundle, but signs and notarizes with
 the maintainer's Developer ID — to use it yourself, swap in your own identity
-and notary profile (or replace the codesign line with `codesign --force
---sign -` for a local ad-hoc bundle, losing notifications).
+and notary profile (or sign ad-hoc with `codesign --force --sign - --entitlements
+packaging/agentsandrepos.entitlements` for a local bundle, losing
+notifications; keep the entitlements or Focus Session can't drive Terminal).
 
 ## Configuration
 
@@ -78,16 +80,14 @@ and notary profile (or replace the codesign line with `codesign --force
   "prScope": "mine",
   "prIntervalMinutes": 5,
   "statusIntervalSeconds": 45,
-  "autoHideStaleDays": 30
+  "showLLMSummaries": true,
+  "checkForUpdates": true
 }
 ```
 
-`autoHideStaleDays` auto-hides repos with no activity (commits or edits to
-changed files) for that many days; they move to the dashboard's Hidden list,
-where a click un-hides them permanently (`staleExemptRepos`). Repos with
-running agents or open PRs are never hidden, nor is a folder added directly
-as a repo (staleness only applies when scanning a folder of repos), and 0
-turns it off. Visible repo tiles sort by severity, then most recently touched.
+Hidden repos and agents, custom agent names, and expanded sections live in
+the same file (`ignoredRepos`, `ignoredAgents`, `agentNames`,
+`expandedSections`) and are managed from the dashboard.
 
 - `roots` — folders scanned (depth-limited) for git repos; a root can also be a
   single repo.
@@ -101,6 +101,11 @@ PR data comes from the [`gh` CLI](https://cli.github.com) using your existing
 
 Agent detection reads `~/.claude/sessions/*.json` (Claude Code's live session
 records) and verifies each PID is actually alive, guarding against PID reuse.
+The last prompt and reply on each agent row come from that session's
+transcript under `~/.claude/projects/`. Everything is read locally: summaries
+run on-device (Apple Intelligence), and nothing from your sessions or repos
+leaves the machine — the only network traffic is `git fetch`, `gh`, and the
+[update check](#update-check).
 
 ## Uninstall
 
@@ -154,6 +159,9 @@ clear events are also written to the unified log (subsystem
 
 ## Requirements
 
-- macOS 14+
+- macOS 14+, Apple Silicon or Intel
+- Optional: [`gh`](https://cli.github.com) for PRs and Actions runs; macOS 26
+  on an Apple Intelligence-capable Mac for on-device summaries (everything
+  else works without them)
 - Xcode toolchain only to build from source (the cask ships a prebuilt,
   Developer ID-signed and notarized app)
