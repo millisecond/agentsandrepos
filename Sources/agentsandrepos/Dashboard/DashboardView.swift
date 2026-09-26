@@ -10,6 +10,14 @@ private struct ContentHeightKey: PreferenceKey {
     }
 }
 
+/// Height of the pinned banner stack, budgeted out of the scroll area.
+private struct BannersHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 /// Root dashboard: tile grids for agents and repos, compact PR rows, footer.
 struct DashboardView: View {
     @ObservedObject var store: SnapshotStore
@@ -20,6 +28,7 @@ struct DashboardView: View {
     let actions: DashboardActions
 
     @State private var contentHeight: CGFloat = 400
+    @State private var bannersHeight: CGFloat = 0
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
 
@@ -48,22 +57,12 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             searchBar
             Divider()
+            if hasBanners(snap) {
+                banners(snap)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        if let warning = perf.warning {
-                            PerfBanner(message: warning)
-                        }
-                        if let version = updates.availableVersion {
-                            UpdateBanner(version: version, actions: actions)
-                        }
-                        #if !NOTIFICATIONS_DISABLED
-                            if !DemoMode.enabled,
-                                NotificationPrompt.shouldShow(config: snap.config, now: Date())
-                            {
-                                NotificationPromptBanner(actions: actions)
-                            }
-                        #endif
                         if DevMode.showRowGallery {
                             DevRowGalleryView(actions: actions)
                         }
@@ -101,11 +100,55 @@ struct DashboardView: View {
         .onPreferenceChange(ContentHeightKey.self) { height in
             Task { @MainActor in contentHeight = height }
         }
+        .onPreferenceChange(BannersHeightKey.self) { height in
+            Task { @MainActor in bannersHeight = height }
+        }
+    }
+
+    // MARK: - Banners
+
+    /// Pinned above the scroll area rather than inside it: when the first
+    /// scan lands, the content and popover grow in the same pass and the
+    /// scroll offset can settle with the top of the content scrolled off —
+    /// taking a one-time banner (the notifications opt-in) out of view before
+    /// the user can answer it.
+    private func hasBanners(_ snap: Snapshot) -> Bool {
+        perf.warning != nil || updates.availableVersion != nil || showsNotificationPrompt(snap)
+    }
+
+    private func showsNotificationPrompt(_ snap: Snapshot) -> Bool {
+        #if NOTIFICATIONS_DISABLED
+            false
+        #else
+            !DemoMode.enabled && NotificationPrompt.shouldShow(config: snap.config, now: Date())
+        #endif
+    }
+
+    private func banners(_ snap: Snapshot) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let warning = perf.warning {
+                PerfBanner(message: warning)
+            }
+            if let version = updates.availableVersion {
+                UpdateBanner(version: version, actions: actions)
+            }
+            #if !NOTIFICATIONS_DISABLED
+                if showsNotificationPrompt(snap) {
+                    NotificationPromptBanner(actions: actions)
+                }
+            #endif
+        }
+        .padding([.horizontal, .top], 12)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: BannersHeightKey.self, value: geo.size.height)
+            })
     }
 
     /// Hug the content when it's short; stop at the screen's height when not.
     private var scrollHeight: CGFloat {
-        let budget = max(200, sizing.maxContentHeight - footerAllowance - searchAllowance)
+        let pinned = footerAllowance + searchAllowance + (hasBanners(store.snapshot) ? bannersHeight : 0)
+        let budget = max(200, sizing.maxContentHeight - pinned)
         return min(contentHeight, budget)
     }
 
