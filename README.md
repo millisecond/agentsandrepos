@@ -1,32 +1,15 @@
 # Agents & Repos
 
-*(binary and formula name: `agentsandrepos`)*
+A macOS menubar app to optimize your claude code usage by: 
+- Search across all claude code sessions and git to find relevant 
+- Quickly open/focus any claude code session or repo/PR
+- Local LLM summaries of your last prompt and the agent's work 
+- Find sessions waiting on your input 
+- Overview of how active each claude code agent has been recently 
+
+This software is developed with **strong assistance from claude code** with a human leading the ideas, design decisions, testing, and debugging. 
 
 ![Agents & Repos demo](docs/demo.gif)
-
-A macOS menubar app that gives you one place to see the endless onslaught of
-info that agentic programming produces:
-
-- **Claude Code agents** running on your machine — busy, **waiting on you**
-  (with what they're waiting for, e.g. a permission prompt), or idle — mapped
-  to the repo or worktree they're working in.
-- **Local repos** across your project folders: branch, dirty/untracked counts,
-  ahead/behind the remote. Clean repos stay out of the way; only what needs
-  attention is listed.
-- **Worktrees**, including the ones Claude Code creates for isolated work,
-  nested under their parent repo.
-- **Open GitHub PRs** per repo (yours by default, toggle for all) with a
-  collapsed CI pass/fail/pending signal.
-- Optional **auto-fetch** on a cadence, RepoBar-style: optionally fast-forwards
-  repos that are clean and strictly behind. Never force-pushes, never resets,
-  never touches a repo an active agent is using.
-- **Live file watching** (FSEvents) over the project roots: new clones show up
-  and repo status refreshes within seconds of a change; a push triggers an
-  early PR check. The polling intervals below remain as a backstop for
-  anything the filesystem can't signal.
-
-The menubar icon shows the most urgent thing: `⏸N` agents waiting on you,
-`⚙N` agents working, or the count of repos needing attention.
 
 ## Install
 
@@ -80,15 +63,6 @@ Two things only the brew cask's notarized build provides:
 the maintainer's Developer ID — to use it yourself, swap in your own identity
 and notary profile (or replace the codesign line with `codesign --force
 --sign -` for a local ad-hoc bundle, losing notifications).
-
-## CLI
-
-The same binary doubles as a terminal tool:
-
-```sh
-agentsandrepos snapshot            # one-shot overview of agents/repos/PRs
-agentsandrepos snapshot --no-prs   # skip the GitHub lookup
-```
 
 ## Configuration
 
@@ -183,10 +157,3 @@ clear events are also written to the unified log (subsystem
 - macOS 14+
 - Xcode toolchain only to build from source (the cask ships a prebuilt,
   Developer ID-signed and notarized app)
-
-## AI full disclosure
-
-This software is developed with **strong assistance from Claude Fable 5**
-(via Claude Code), with a human leading the ideas, design decisions, testing,
-and debugging. Fittingly, the app itself exists to watch Claude agents work —
-so it was largely built by the kind of agent it monitors.

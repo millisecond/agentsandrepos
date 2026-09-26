@@ -19,14 +19,11 @@ cask "agentsandrepos" do
   app "Agents & Repos.app"
   binary "#{appdir}/Agents & Repos.app/Contents/MacOS/agentsandrepos"
 
-  # Menubar app: launch right after install so it appears without an extra
-  # step. (Would need removing if this ever moves to homebrew/cask — official
-  # casks don't auto-launch.) postflight_steps, not the deprecated postflight:
-  # Homebrew 6 runs these declarative steps in its sandbox and warns on the
-  # old block form.
-  postflight_steps do
-    run "/usr/bin/open", args: ["{{appdir}}/Agents & Repos.app"]
-  end
+  # No auto-launch postflight: Homebrew 6 runs install steps inside a sandbox
+  # that can't reach RunningBoard, so `open` fails there (kLSUnknownErr,
+  # "Couldn't communicate with a helper application") and takes the whole
+  # install down with it. The caveats tell the user to open the app; the
+  # in-app upgrade command already ends with `open -a`.
 
   zap trash: [
     "~/.config/agentsandrepos",
@@ -37,6 +34,8 @@ cask "agentsandrepos" do
   ]
 
   caveats <<~EOS
+    Launch it with:
+      open -a "Agents & Repos"
     To start it at login, open the app and enable "Start at login" in
     Settings.
   EOS
