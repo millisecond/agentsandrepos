@@ -1,6 +1,6 @@
 # Agents & Repos
 
-A macOS menubar app to optimize your claude code usage by: 
+A macOS menubar app to optimize your claude code usage: 
 - Search across all claude code sessions and git  
 - Quickly open/focus any claude code session or repo/PR
 - Local LLM summaries of your last prompt and the agent's work 
